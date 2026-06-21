@@ -1,6 +1,223 @@
-import { redirect } from "next/navigation";
+"use client";
 
-// Landing — redirects to the unified login per the routing spec.
-export default function HomePage() {
-  redirect("/login");
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiClient } from "../shared/api/api-client";
+
+// Описываем интерфейс пользователя в соответствии с моделью БД
+interface InstanceUser {
+  uuid: string;
+  email: string;
+  name: string | null;
+  role: "ADMIN" | "CREATOR" | "USER" | "CLIENT";
+  active: boolean;
+  allowed_tools: string[];
+}
+
+export default function CRMDashboard() {
+  const router = useRouter();
+  const [users, setUsers] = useState<InstanceUser[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  // Функция для загрузки актуальных данных из БД
+  const fetchUsers = async () => {
+    try {
+      const response = await apiClient.get<InstanceUser[]>("/creator/users/");
+      setUsers(response.data);
+    } catch (err) {
+      console.error("Ошибка при получении списка сотрудников:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Проверка авторизации на клиенте перед запросом данных
+    if (!localStorage.getItem("access_token")) {
+      router.push("/login");
+      return;
+    }
+    fetchUsers();
+  }, [router]);
+
+  const handleInviteUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiClient.post("/creator/invite-user/", { email: inviteEmail });
+      alert(`Инвайт успешно отправлен на ${inviteEmail}`);
+      setInviteEmail("");
+      fetchUsers(); // Перезапрашиваем список (если нужно зафиксировать изменения)
+    } catch (err) {
+      alert("Ошибка отправки инвайта. Возможно, пользователь уже зарегистрирован.");
+    }
+  };
+
+  const handlePromote = async (uuid: string) => {
+    try {
+      await apiClient.post("/creator/promote-to-creator/", { user_uuid: uuid });
+      alert("Пользователь успешно повышен до CREATOR");
+      fetchUsers(); // Обновляем состояние интерфейса из базы
+    } catch (err) {
+      alert("Не удалось повысить пользователя.");
+    }
+  };
+
+  const handleDemote = async (uuid: string) => {
+    try {
+      await apiClient.post("/creator/demote-to-user/", { user_uuid: uuid });
+      alert("Пользователь понижен до USER, кастомные права сброшены.");
+      fetchUsers();
+    } catch (err) {
+      alert("Не удалось понизить пользователя (нельзя понизить самого себя).");
+    }
+  };
+
+  const handleUpdatePermissions = async (uuid: string) => {
+    // ХАРДКОД ДЛЯ ТЕСТА: Передаем валидный набор строк из энама AppTools твоей модели.
+    // В реальном UI здесь должна открываться модалка с чекбоксами.
+    const testTools = ["notes", "tables", "analytics"]; 
+    
+    try {
+      await apiClient.post("/creator/update-permissions/", { 
+        user_uuid: uuid, 
+        allowed_tools: testTools 
+      });
+      alert(`Права обновлены: ${testTools.join(", ")}`);
+      fetchUsers();
+    } catch (err) {
+      alert("Ошибка изменения прав. Креаторам нельзя точечно менять доступы.");
+    }
+  };
+
+  const handleDeactivate = async (uuid: string) => {
+    if (!confirm("Точно деактивировать сотрудника в рамках вашего инстанса?")) return;
+    try {
+      await apiClient.post("/creator/deactivate-user/", { user_uuid: uuid });
+      alert("Пользователь успешно деактивирован.");
+      fetchUsers();
+    } catch (err) {
+      alert("Не удалось деактивировать пользователя.");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    router.push("/login");
+  };
+
+  if (loading) {
+    return <div className="p-8 text-center text-gray-500">Загрузка панели управления...</div>;
+  }
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+      {/* Шапка панели */}
+      <div className="flex justify-between items-center mb-8 border-b pb-4">
+        <h1 className="text-3xl font-bold">Управление инстансом (Панель Creator)</h1>
+        <button onClick={handleLogout} className="text-red-500 hover:underline font-semibold">Выйти</button>
+      </div>
+
+      {/* Блок отправки инвайтов */}
+      <div className="mb-8 p-4 bg-white shadow rounded border">
+        <h2 className="text-lg font-bold mb-2">Пригласить сотрудника (User)</h2>
+        <form onSubmit={handleInviteUser} className="flex gap-2">
+          <input 
+            type="email" 
+            placeholder="Email сотрудника" 
+            className="border p-2 flex-grow rounded focus:outline-indigo-500"
+            value={inviteEmail} 
+            onChange={(e) => setInviteEmail(e.target.value)} 
+            required 
+          />
+          <button type="submit" className="bg-indigo-600 text-white px-4 rounded hover:bg-indigo-700 transition">
+            Отправить инвайт
+          </button>
+        </form>
+      </div>
+
+      {/* Список реальных пользователей из инстанса */}
+      <div className="bg-white shadow rounded p-4 border">
+        <h2 className="text-lg font-bold mb-4">Сотрудники компании</h2>
+        
+        {users.length === 0 ? (
+          <p className="text-gray-500 text-sm">В данном инстансе пока нет зарегистрированных сотрудников.</p>
+        ) : (
+          <ul className="space-y-4">
+            {users.map(user => (
+              <li 
+                key={user.uuid} 
+                className={`border p-4 rounded flex items-center justify-between transition ${
+                  user.active ? "bg-white" : "bg-gray-100 opacity-60"
+                }`}
+              >
+                {/* Данные пользователя и его доступы */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-gray-900">{user.email}</p>
+                    {user.name && <span className="text-sm text-gray-600">({user.name})</span>}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Роль: <span className="font-mono font-semibold text-indigo-600">{user.role}</span> | UUID: {user.uuid}
+                  </p>
+                  
+                  {/* Вывод массива разрешенных инструментов из таблицы user_permissions */}
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {user.allowed_tools.length === 0 ? (
+                      <span className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-medium border border-red-200">
+                        Нет доступов
+                      </span>
+                    ) : (
+                      user.allowed_tools.map((tool) => (
+                        <span 
+                          key={tool} 
+                          className="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-mono border"
+                        >
+                          {tool}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Кнопки управления действиями бэкенда */}
+                <div className="flex gap-2 flex-wrap max-w-md justify-end">
+                  {user.role !== "CREATOR" && (
+                    <button 
+                      onClick={() => handlePromote(user.uuid)} 
+                      className="text-xs bg-green-50 text-green-700 border border-green-200 px-2.5 py-1.5 rounded hover:bg-green-100 transition"
+                    >
+                      Promote to Creator
+                    </button>
+                  )}
+                  {user.role === "CREATOR" && (
+                    <button 
+                      onClick={() => handleDemote(user.uuid)} 
+                      className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2.5 py-1.5 rounded hover:bg-yellow-100 transition"
+                    >
+                      Demote to User
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => handleUpdatePermissions(user.uuid)} 
+                    className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1.5 rounded hover:bg-blue-100 transition"
+                  >
+                    Update Perms (Test)
+                  </button>
+                  {user.active && (
+                    <button 
+                      onClick={() => handleDeactivate(user.uuid)} 
+                      className="text-xs bg-red-50 text-red-700 border border-red-200 px-2.5 py-1.5 rounded hover:bg-red-100 transition"
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
 }
