@@ -1,54 +1,87 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/src/shared/api/api-client";
-
-// ⚡ Утилита для извлечения данных из JWT
-const parseJwt = (token: string) => {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return null;
-  }
-};
-
-interface ColumnMeta {
-  type: string;
-  required: boolean;
-}
-
-interface Template {
-  id: string; // В бэкенде может приходить id или _id
-  name: string;
-  schema: Record<string, ColumnMeta>;
-}
+import type { JsonValue, TemplateResponse } from "@/src/entities/template/model/types";
+import { templateApi } from "@/src/features/templates/api/template-api";
+import { getAccessToken, getInstanceUuidFromAccessToken } from "@/src/shared/lib/session";
 
 interface RecordItem {
-  uuid: string; // Или id, в зависимости от модели
-  data: Record<string, any>;
+  uuid?: string;
+  id?: string;
+  _id?: string;
+  data: Record<string, JsonValue>;
   created_at?: string;
 }
 
-interface PaginatedRecordsResponse {
-  items: RecordItem[];
-  total: number;
-  limit: number;
-  offset: number;
+interface RecordsApiObject {
+  items?: unknown;
+  data?: unknown;
+  results?: unknown;
+  records?: unknown;
 }
+
+const isRecordItem = (value: unknown): value is RecordItem => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const data = (value as { data?: unknown }).data;
+  return Boolean(data) && typeof data === "object" && !Array.isArray(data);
+};
+
+const getRecordId = (record: RecordItem): string | null =>
+  record.uuid ?? record.id ?? record._id ?? null;
+
+const extractRecords = (payload: unknown): RecordItem[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter(isRecordItem);
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const responseObject = payload as RecordsApiObject;
+  const candidateArrays = [
+    responseObject.items,
+    responseObject.data,
+    responseObject.results,
+    responseObject.records,
+  ];
+
+  const recordsCandidate = candidateArrays.find(Array.isArray);
+  return Array.isArray(recordsCandidate)
+    ? recordsCandidate.filter(isRecordItem)
+    : [];
+};
+
+const stringifyCell = (value: JsonValue | undefined): string => {
+  if (value === undefined || value === null) {
+    return "—";
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+};
+
+const getBooleanFormValue = (value: JsonValue | undefined): boolean =>
+  typeof value === "boolean" ? value : false;
+
+const getTextFormValue = (value: JsonValue | undefined): string | number =>
+  typeof value === "string" || typeof value === "number" ? value : "";
 
 export default function NotesPage() {
   const router = useRouter();
   const [instanceUuid, setInstanceUuid] = useState<string | null>(null);
   
   // Данные шаблонов и записей
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [templates, setTemplates] = useState<TemplateResponse[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateResponse | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
   
   // Состояния UI
@@ -57,91 +90,101 @@ export default function NotesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Данные динамической формы
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, JsonValue>>({});
 
   // 1. ИНИЦИАЛИЗАЦИЯ: Читаем instance_uuid
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    const payload = parseJwt(token);
-    if (payload && payload.instance_uuid) {
-      setInstanceUuid(payload.instance_uuid);
-    }
+    let cancelled = false;
+
+    void Promise.resolve().then(() => {
+      if (cancelled) {
+        return;
+      }
+
+      if (!getAccessToken()) {
+        router.push("/login");
+        return;
+      }
+
+      setInstanceUuid(getInstanceUuidFromAccessToken());
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   // 2. ЗАГРУЗКА ТАБЛИЦ (Шаблонов)
   useEffect(() => {
     if (!instanceUuid) return;
+    let cancelled = false;
+
     const fetchTemplates = async () => {
       try {
+        if (cancelled) {
+          return;
+        }
         setLoadingTemplates(true);
-        const response = await apiClient.get<any[]>(`/instances/${instanceUuid}/templates`);
-        const normalizedData: Template[] = (response.data || []).map(tpl => ({
-          ...tpl,
-          id: tpl.id || tpl._id
-        }));
-        setTemplates(normalizedData);
-      } catch (err) {
-        console.error("Ошибка загрузки таблиц:", err);
+        const nextTemplates = await templateApi.getTemplates(instanceUuid);
+        if (!cancelled) {
+          setTemplates(nextTemplates);
+        }
+      } catch (requestError) {
+        console.error("Ошибка загрузки таблиц:", requestError);
       } finally {
-        setLoadingTemplates(false);
+        if (!cancelled) {
+          setLoadingTemplates(false);
+        }
       }
     };
-    fetchTemplates();
+
+    void Promise.resolve().then(fetchTemplates);
+
+    return () => {
+      cancelled = true;
+    };
   }, [instanceUuid]);
 
   // 3. ЗАГРУЗКА ЗАПИСЕЙ ПРИ ВЫБОРЕ ТАБЛИЦЫ
-// 3. ЗАГРУЗКА ЗАПИСЕЙ ПРИ ВЫБОРЕ ТАБЛИЦЫ
-  const fetchRecords = async (templateId: string) => {
+  const fetchRecords = useCallback(async (templateId: string) => {
     if (!instanceUuid) return;
     try {
       setLoadingRecords(true);
-      const res = await apiClient.get<any>(
+      const res = await apiClient.get<unknown>(
         `/instances/${instanceUuid}/templates/${templateId}/notes?limit=100&offset=0`
       );
-      
-      // 🐛 ВЫВОДИМ ОТВЕТ БЭКЕНДА В КОНСОЛЬ БРАУЗЕРА
-      console.log("Ответ от бэкенда (GET /notes):", res.data);
 
-      let dataArray: any[] = [];
-      
-      // Пытаемся найти массив в самых популярных ключах пагинации
-      if (res.data) {
-        if (Array.isArray(res.data)) {
-          dataArray = res.data;
-        } else if (res.data.items && Array.isArray(res.data.items)) {
-          dataArray = res.data.items;
-        } else if (res.data.data && Array.isArray(res.data.data)) {
-          dataArray = res.data.data;
-        } else if (res.data.results && Array.isArray(res.data.results)) {
-          dataArray = res.data.results;
-        } else if (res.data.records && Array.isArray(res.data.records)) {
-          dataArray = res.data.records;
-        }
-      }
-
-      setRecords(dataArray);
-    } catch (err) {
-      console.error("Ошибка загрузки записей:", err);
+      setRecords(extractRecords(res.data));
+    } catch (requestError) {
+      console.error("Ошибка загрузки записей:", requestError);
       setRecords([]);
     } finally {
       setLoadingRecords(false);
     }
-  };
+  }, [instanceUuid]);
 
   useEffect(() => {
-    if (selectedTemplate) {
-      fetchRecords(selectedTemplate.id);
-    } else {
-      setRecords([]);
-    }
-  }, [selectedTemplate]);
+    let cancelled = false;
+
+    void Promise.resolve().then(async () => {
+      if (cancelled) {
+        return;
+      }
+
+      if (selectedTemplate) {
+        await fetchRecords(selectedTemplate.id);
+      } else {
+        setRecords([]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchRecords, selectedTemplate]);
 
   // Управление формой
-  const handleInputChange = (colName: string, value: any) => {
+  const handleInputChange = (colName: string, value: JsonValue) => {
     setFormData(prev => ({ ...prev, [colName]: value }));
   };
 
@@ -164,8 +207,8 @@ export default function NotesPage() {
       setFormData({});
       await fetchRecords(selectedTemplate.id);
       alert("Запись успешно добавлена!");
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Ошибка создания записи");
+    } catch {
+      alert("Ошибка создания записи");
     }
   };
 
@@ -181,7 +224,7 @@ export default function NotesPage() {
         `/instances/${instanceUuid}/templates/${selectedTemplate.id}/notes/${actualId}`
       );
       await fetchRecords(selectedTemplate.id);
-    } catch (err) {
+    } catch {
       alert("Ошибка удаления записи");
     }
   };
@@ -271,23 +314,19 @@ export default function NotesPage() {
                     </tr>
                   </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                    {Array.isArray(records) && records.map((row, idx) => {
-                      // Обрабатываем возможные варианты ключа (uuid, id или _id)
-                      const recordId = row?.uuid || (row as any)?.id || (row as any)?._id; 
-                      
-                      // На всякий случай проверяем, что row и row.data существуют
-                      if (!row || !row.data) return null;
+                    {records.map((row, idx) => {
+                      const recordId = getRecordId(row);
 
                       return (
                         <tr key={recordId || idx} className="hover:bg-gray-50 transition">
                           {columns.map(col => (
                             <td key={col} className="px-4 py-3 text-sm text-gray-900 truncate max-w-[200px]">
-                              {row.data[col]?.toString() || "—"}
+                              {stringifyCell(row.data[col])}
                             </td>
                           ))}
                           <td className="px-4 py-3 text-right text-sm font-medium whitespace-nowrap">
                             <button 
-                              onClick={() => handleDeleteRecord(recordId)}
+                              onClick={() => recordId && handleDeleteRecord(recordId)}
                               className="text-red-500 hover:text-red-700"
                             >
                               Удалить
@@ -309,7 +348,7 @@ export default function NotesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4 text-gray-900 border-b pb-2">
-              Новая запись в "{selectedTemplate.name}"
+              Новая запись в &quot;{selectedTemplate.name}&quot;
             </h3>
             
             <form onSubmit={handleCreateRecord} className="flex flex-col gap-4">
@@ -327,7 +366,7 @@ export default function NotesPage() {
                       <input 
                         type="checkbox"
                         className="mt-1 h-4 w-4 text-indigo-600 rounded"
-                        checked={formData[colName] || false}
+                        checked={getBooleanFormValue(formData[colName])}
                         onChange={(e) => handleInputChange(colName, e.target.checked)}
                       />
                     ) : meta.type === "number" ? (
@@ -335,7 +374,7 @@ export default function NotesPage() {
                         type="number"
                         required={meta.required}
                         className="border p-2 rounded text-sm focus:outline-indigo-500"
-                        value={formData[colName] || ""}
+                        value={getTextFormValue(formData[colName])}
                         onChange={(e) => handleInputChange(colName, Number(e.target.value))}
                       />
                     ) : (
@@ -343,7 +382,7 @@ export default function NotesPage() {
                         type="text"
                         required={meta.required}
                         className="border p-2 rounded text-sm focus:outline-indigo-500"
-                        value={formData[colName] || ""}
+                        value={getTextFormValue(formData[colName])}
                         onChange={(e) => handleInputChange(colName, e.target.value)}
                       />
                     )}

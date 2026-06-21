@@ -20,14 +20,14 @@ export default function AdminLogin() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await apiClient.post("/admin/login/", formData, {
+      const response = await apiClient.post<{ access_token: string }>("/admin/login/", formData, {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
       // Сохраняем токен и редиректим в админку
       localStorage.setItem("access_token", response.data.access_token);
       router.push("/admin");
-    } catch (err: any) {
+    } catch {
       setError("Ошибка входа. Проверьте логин и пароль.");
     }
   };

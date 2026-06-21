@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "../shared/api/api-client";
+import { AppSidebar } from "@/src/widgets/app-sidebar/ui/AppSidebar";
 
 // Описываем интерфейс пользователя в соответствии с моделью БД
 interface InstanceUser {
@@ -38,7 +39,7 @@ export default function CRMDashboard() {
       router.push("/login");
       return;
     }
-    fetchUsers();
+    void Promise.resolve().then(fetchUsers);
   }, [router]);
 
   const handleInviteUser = async (e: React.FormEvent) => {
@@ -48,7 +49,7 @@ export default function CRMDashboard() {
       alert(`Инвайт успешно отправлен на ${inviteEmail}`);
       setInviteEmail("");
       fetchUsers(); // Перезапрашиваем список (если нужно зафиксировать изменения)
-    } catch (err) {
+    } catch {
       alert("Ошибка отправки инвайта. Возможно, пользователь уже зарегистрирован.");
     }
   };
@@ -58,7 +59,7 @@ export default function CRMDashboard() {
       await apiClient.post("/creator/promote-to-creator/", { user_uuid: uuid });
       alert("Пользователь успешно повышен до CREATOR");
       fetchUsers(); // Обновляем состояние интерфейса из базы
-    } catch (err) {
+    } catch {
       alert("Не удалось повысить пользователя.");
     }
   };
@@ -68,7 +69,7 @@ export default function CRMDashboard() {
       await apiClient.post("/creator/demote-to-user/", { user_uuid: uuid });
       alert("Пользователь понижен до USER, кастомные права сброшены.");
       fetchUsers();
-    } catch (err) {
+    } catch {
       alert("Не удалось понизить пользователя (нельзя понизить самого себя).");
     }
   };
@@ -85,7 +86,7 @@ export default function CRMDashboard() {
       });
       alert(`Права обновлены: ${testTools.join(", ")}`);
       fetchUsers();
-    } catch (err) {
+    } catch {
       alert("Ошибка изменения прав. Креаторам нельзя точечно менять доступы.");
     }
   };
@@ -96,7 +97,7 @@ export default function CRMDashboard() {
       await apiClient.post("/creator/deactivate-user/", { user_uuid: uuid });
       alert("Пользователь успешно деактивирован.");
       fetchUsers();
-    } catch (err) {
+    } catch {
       alert("Не удалось деактивировать пользователя.");
     }
   };
@@ -111,7 +112,9 @@ export default function CRMDashboard() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="min-h-screen bg-gray-50 text-gray-950 md:flex">
+      <AppSidebar />
+      <main className="mx-auto w-full max-w-5xl p-8">
       {/* Шапка панели */}
       <div className="flex justify-between items-center mb-8 border-b pb-4">
         <h1 className="text-3xl font-bold">Управление инстансом (Панель Creator)</h1>
@@ -218,6 +221,7 @@ export default function CRMDashboard() {
           </ul>
         )}
       </div>
+      </main>
     </div>
   );
 }
