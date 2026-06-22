@@ -4,10 +4,21 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/src/shared/api/api-client";
 
+interface AdminInstance {
+  uuid: string;
+  title: string;
+}
+
+interface AdminCreator {
+  uuid: string;
+  email: string;
+  active: boolean;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [instances, setInstances] = useState<any[]>([]);
-  const [creators, setCreators] = useState<any[]>([]);
+  const [instances, setInstances] = useState<AdminInstance[]>([]);
+  const [creators, setCreators] = useState<AdminCreator[]>([]);
   
   // Стейты для форм
   const [newInstanceTitle, setNewInstanceTitle] = useState("");
@@ -18,8 +29,8 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     try {
       const [instRes, creatRes] = await Promise.all([
-        apiClient.get("/admin/instances/"),
-        apiClient.get("/admin/creators/")
+        apiClient.get<AdminInstance[]>("/admin/instances/"),
+        apiClient.get<AdminCreator[]>("/admin/creators/")
       ]);
       setInstances(instRes.data);
       setCreators(creatRes.data);
@@ -34,7 +45,7 @@ export default function AdminDashboard() {
       router.push("/admin/login");
       return;
     }
-    fetchData();
+    void Promise.resolve().then(fetchData);
   }, [router]);
 
   // Экшены

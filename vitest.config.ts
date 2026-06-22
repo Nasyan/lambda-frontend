@@ -6,7 +6,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      // Match tsconfig paths ("@/*" -> "./*", repo root) so "@/src/..." imports resolve.
+      "@": path.resolve(__dirname, "."),
     },
   },
   test: {

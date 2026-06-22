@@ -21,7 +21,7 @@ export default function Register() {
     try {
       await apiClient.post("/auth/register/", { email, name, password });
       setStep("verify"); // Переключаем на экран ввода кода
-    } catch (err) {
+    } catch {
       alert("Ошибка регистрации. Возможно инвайт протух или почта неверная.");
     }
   };
@@ -32,7 +32,7 @@ export default function Register() {
       await apiClient.post("/auth/verify-registration/", { email, code });
       alert("Успешно! Теперь вы можете войти.");
       router.push("/login");
-    } catch (err) {
+    } catch {
       alert("Неверный код.");
     }
   };
@@ -41,7 +41,7 @@ export default function Register() {
     try {
       await apiClient.post("/auth/resend-code/", { email });
       alert("Новый код отправлен!");
-    } catch (err) {
+    } catch {
       alert("Ошибка отправки кода.");
     }
   };
