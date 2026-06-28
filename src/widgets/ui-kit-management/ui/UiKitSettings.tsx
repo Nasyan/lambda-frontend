@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { UiKitItem } from "@/src/entities/user/model/types";
 
 interface Props {
@@ -17,6 +17,14 @@ interface DraftPositions {
   [uuid: string]: { x: number; y: number };
 }
 
+const createDraftPositions = (favorites: UiKitItem[]): DraftPositions => {
+  const initialDrafts: DraftPositions = {};
+  favorites.forEach((item) => {
+    initialDrafts[item.uuid] = { x: item.position.x, y: item.position.y };
+  });
+  return initialDrafts;
+};
+
 export const UiKitSettings = ({
   favorites,
   onAddFavorite,
@@ -28,16 +36,16 @@ export const UiKitSettings = ({
   const [isSavingPositions, setIsSavingPositions] = useState(false);
 
   // Локальный стейт для измененных координат (черновик)
-  const [draftPositions, setDraftPositions] = useState<DraftPositions>({});
+  const [draftPositions, setDraftPositions] = useState<DraftPositions>(() =>
+    createDraftPositions(favorites),
+  );
+  const [previousFavorites, setPreviousFavorites] = useState(favorites);
 
   // Синхронизируем черновик, если список favorites пришел измененным извне (например, добавили или удалили элемент)
-  useEffect(() => {
-    const initialDrafts: DraftPositions = {};
-    favorites.forEach((item) => {
-      initialDrafts[item.uuid] = { x: item.position.x, y: item.position.y };
-    });
-    setDraftPositions(initialDrafts);
-  }, [favorites]);
+  if (previousFavorites !== favorites) {
+    setPreviousFavorites(favorites);
+    setDraftPositions(createDraftPositions(favorites));
+  }
 
   const handleAddMockItem = async () => {
     setIsSubmitting(true);

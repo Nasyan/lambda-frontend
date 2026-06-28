@@ -4,7 +4,23 @@ import type {
   EventType,
 } from "@/src/entities/trigger/model/types";
 
-export const EMPTY_DRAFT = {
+export interface TriggerDraft {
+  name: string;
+  target_field: string;
+  trigger_type: TriggerType;
+  payload_return_type: PayloadReturnType;
+  event_type: EventType;
+  cron_expression: string;
+  action_name: string;
+  source_template_uuid: string;
+  target_template_uuid: string;
+  conditionAstJson: string;
+  payloadAstJson: string;
+  actionParamsJson: string;
+  actionMappingAstJson: string;
+}
+
+export const EMPTY_DRAFT: TriggerDraft = {
   name: "",
   target_field: "",
   trigger_type: "AUTOMATION" as TriggerType,

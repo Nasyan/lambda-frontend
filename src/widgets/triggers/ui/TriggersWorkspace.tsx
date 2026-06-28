@@ -7,6 +7,7 @@ import { TriggersHeader } from "./TriggersHeader";
 import { TriggersList } from "./TriggersList";
 import { getInstanceUuidFromAccessToken } from "@/src/shared/lib/session";
 import { useEffect, useState } from "react";
+import type { TriggerResponse } from "@/src/entities/trigger/model/types";
 
 export function TriggersWorkspace() {
   const router = useRouter();
@@ -24,7 +25,14 @@ export function TriggersWorkspace() {
   const [instanceUuid, setInstanceUuid] = useState<string | null>(null);
 
   useEffect(() => {
-    setInstanceUuid(getInstanceUuidFromAccessToken());
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) setInstanceUuid(getInstanceUuidFromAccessToken());
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Handler для перехода на страницу создания триггера
@@ -78,9 +86,9 @@ export function TriggersWorkspace() {
             loadTriggers={() => {}}
             handleExecute={handleExecute}
             // Передаем новый хэндлер редиректа вместо openEdit
-            openEdit={(trigger: any) => {
+            openEdit={(trigger: TriggerResponse) => {
               const id = trigger.id || trigger._id || trigger.uuid;
-              handleEditRedirect(id);
+              if (id) handleEditRedirect(id);
             }}
             handleDelete={handleDelete}
           />

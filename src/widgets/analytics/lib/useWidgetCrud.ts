@@ -1,7 +1,14 @@
 import { useState, useCallback, useEffect } from "react";
 import { analyticsApi } from "@/src/features/analytics/api/analytics-api";
 import { EMPTY_WIDGET_DRAFT, WidgetDraft } from "../model/constants";
-import type { WidgetResponse } from "@/src/entities/analytics/model/types";
+import type {
+  WidgetCreatePayload,
+  WidgetResponse,
+} from "@/src/entities/analytics/model/types";
+import type { JsonValue } from "@/src/entities/template/model/types";
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Неизвестная ошибка";
 
 export function useWidgetCrud(instanceUuid: string | null) {
   const [widgets, setWidgets] = useState<WidgetResponse[]>([]);
@@ -19,15 +26,16 @@ export function useWidgetCrud(instanceUuid: string | null) {
     try {
       const data = await analyticsApi.getWidgets(instanceUuid);
       setWidgets(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   }, [instanceUuid]);
 
   useEffect(() => {
-    if (instanceUuid) loadWidgets();
+    if (!instanceUuid) return;
+    void Promise.resolve().then(loadWidgets);
   }, [instanceUuid, loadWidgets]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -39,11 +47,11 @@ export function useWidgetCrud(instanceUuid: string | null) {
     setSaving(true);
 
     try {
-      let parsedAst = null;
+      let parsedAst: JsonValue | null = null;
       const trimmedAst = draft.astFilterJson.trim();
       if (trimmedAst && trimmedAst !== "null") {
         try {
-          parsedAst = JSON.parse(trimmedAst);
+          parsedAst = JSON.parse(trimmedAst) as JsonValue;
         } catch {
           throw new Error("Невалидный синтаксис JSON в поле AST Filter");
         }
@@ -55,7 +63,7 @@ export function useWidgetCrud(instanceUuid: string | null) {
         );
       }
 
-      const payload = {
+      const payload: WidgetCreatePayload = {
         name: draft.name.trim(),
         target_template_uuid: draft.target_template_uuid.trim(),
         widget_type: draft.widget_type,
@@ -86,8 +94,8 @@ export function useWidgetCrud(instanceUuid: string | null) {
       setDraft(EMPTY_WIDGET_DRAFT);
       setEditingId(null);
       await loadWidgets();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -105,8 +113,8 @@ export function useWidgetCrud(instanceUuid: string | null) {
       if (activeWidgetId === id) onWidgetDeleted();
       setMessage("Виджет удален");
       await loadWidgets();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     }
   };
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/src/shared/api/api-client";
+import type { JsonValue } from "@/src/entities/template/model/types";
 
 interface AdminInstance {
   uuid: string;
@@ -63,7 +64,7 @@ export default function AdminDashboard() {
       await apiClient.post("/admin/instances/", { title: newInstanceTitle });
       setNewInstanceTitle("");
       await fetchData();
-    } catch (err) {
+    } catch {
       alert("Не удалось создать инстанс");
     }
   };
@@ -74,7 +75,7 @@ export default function AdminDashboard() {
     try {
       await apiClient.delete(`/admin/instances/${id}/`);
       await fetchData();
-    } catch (err) {
+    } catch {
       alert("Ошибка при деструкции инстанса");
     }
   };
@@ -86,7 +87,7 @@ export default function AdminDashboard() {
   ) => {
     try {
       // Стучимся на созданный адаптивный эндпоинт
-      const response = await apiClient.get<any>(
+      const response = await apiClient.get<JsonValue>(
         `/instances/${instanceUuid}/schema/export`,
       );
 
@@ -123,7 +124,7 @@ export default function AdminDashboard() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const bundle = JSON.parse(event.target?.result as string);
+        const bundle: unknown = JSON.parse(event.target?.result as string);
 
         // Отправляем на наш адаптивный эндпоинт импорта
         await apiClient.post(
@@ -161,7 +162,7 @@ export default function AdminDashboard() {
       setInviteEmail("");
       setInviteInstanceId("");
       alert("Инвайт успешно отправлен креатору!");
-    } catch (err) {
+    } catch {
       alert("Ошибка отправки инвайта");
     }
   };
@@ -171,7 +172,7 @@ export default function AdminDashboard() {
     try {
       await apiClient.patch(`/admin/creators/${id}/deactivate`);
       await fetchData();
-    } catch (err) {
+    } catch {
       alert("Не удалось изменить статус пользователя");
     }
   };

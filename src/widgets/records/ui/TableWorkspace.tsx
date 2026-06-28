@@ -7,14 +7,8 @@ import {
   recordApi,
   type RecordResponse,
 } from "@/src/features/records/api/record-api";
-import {
-  getAccessToken,
-  getInstanceUuidFromAccessToken,
-} from "@/src/shared/lib/session";
-import type {
-  TemplateResponse,
-  JsonObject,
-} from "@/src/entities/template/model/types";
+import { getInstanceUuidFromAccessToken } from "@/src/shared/lib/session";
+import type { JsonObject, TemplateResponse } from "@/src/entities/template/model/types";
 import { AppSidebar } from "@/src/widgets/app-sidebar/ui/AppSidebar";
 import { ColumnDef, DataTable } from "./DataTable";
 import { Modal } from "./Modal";
@@ -25,6 +19,12 @@ import { DynamicForm } from "./DynamicForm";
 interface RecordsWorkspaceProps {
   templateUuid: string;
 }
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Ошибка сохранения";
+
+const getRecordId = (record: RecordResponse): string =>
+  record.id || record._id || "";
 
 export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
   const router = useRouter();
@@ -47,9 +47,18 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
   );
 
   useEffect(() => {
-    const tokenInstanceUuid = getInstanceUuidFromAccessToken();
-    if (!tokenInstanceUuid) router.push("/login");
-    else setInstanceUuid(tokenInstanceUuid);
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+
+      const tokenInstanceUuid = getInstanceUuidFromAccessToken();
+      if (!tokenInstanceUuid) router.push("/login");
+      else setInstanceUuid(tokenInstanceUuid);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const loadData = useCallback(async () => {
@@ -72,7 +81,7 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
   }, [instanceUuid, templateUuid]);
 
   useEffect(() => {
-    void loadData();
+    void Promise.resolve().then(loadData);
   }, [loadData]);
 
   // Маппинг схемы в формат колонок для DataTable
@@ -84,14 +93,14 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
 
   // --- ОБРАБОТЧИКИ ---
 
-  const handleSave = async (formData: Record<string, any>) => {
+  const handleSave = async (formData: JsonObject) => {
     if (!instanceUuid || !template?.schema) return;
     setProcessing(true);
     try {
       // Подготовка данных с учетом типов
-      const formattedData: Record<string, any> = {};
+      const formattedData: JsonObject = {};
       Object.keys(template.schema).forEach((col) => {
-        const meta = template.schema[col] as any;
+        const meta = template.schema[col];
         const val = formData[col];
         if (val === undefined || val === "") {
           if (meta.required) throw new Error(`Поле "${col}" обязательно`);
@@ -103,7 +112,7 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
         else formattedData[col] = val;
       });
 
-      const rId = editingRecord?.id || (editingRecord as any)?._id;
+      const rId = editingRecord ? getRecordId(editingRecord) : "";
       if (rId) {
         await recordApi.updateRecord(instanceUuid, templateUuid, rId, {
           data: formattedData,
@@ -116,8 +125,8 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
 
       setIsModalOpen(false);
       await loadData();
-    } catch (error: any) {
-      alert(error.message || "Ошибка сохранения");
+    } catch (error) {
+      alert(getErrorMessage(error));
     } finally {
       setProcessing(false);
     }
@@ -205,10 +214,11 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
           columns={tableColumns}
           data={currentList}
           selectedIds={selectedIds}
-          getRowId={(row) => row.id || (row as any)._id || ""}
+          getRowId={getRecordId}
           onToggleSelect={(id) => {
             const newIds = new Set(selectedIds);
-            newIds.has(id) ? newIds.delete(id) : newIds.add(id);
+            if (newIds.has(id)) newIds.delete(id);
+            else newIds.add(id);
             setSelectedIds(newIds);
           }}
           onToggleSelectAll={() => {
@@ -216,11 +226,11 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
               setSelectedIds(new Set());
             else
               setSelectedIds(
-                new Set(currentList.map((r) => r.id || (r as any)._id || "")),
+                new Set(currentList.map(getRecordId)),
               );
           }}
           renderActions={(row) => {
-            const rId = row.id || (row as any)._id || "";
+            const rId = getRecordId(row);
             if (currentView === "active") {
               return (
                 <div className="flex flex-col">

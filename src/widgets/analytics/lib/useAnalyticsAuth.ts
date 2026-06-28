@@ -12,19 +12,30 @@ export function useAnalyticsAuth() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    const uuid = getInstanceUuidFromAccessToken();
-    if (!uuid) {
-      setAuthError("В сессии отсутствует текущий инстанс (instance_uuid)");
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+
+      const token = getAccessToken();
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+
+      const uuid = getInstanceUuidFromAccessToken();
+      if (!uuid) {
+        setAuthError("В сессии отсутствует текущий инстанс (instance_uuid)");
+        setIsAuthLoading(false);
+        return;
+      }
+
+      setInstanceUuid(uuid);
       setIsAuthLoading(false);
-      return;
-    }
-    setInstanceUuid(uuid);
-    setIsAuthLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   return { instanceUuid, authError, isAuthLoading };

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
@@ -20,6 +20,7 @@ export function DeleteConfirmationModal({
   bulkCount = 0,
 }: DeleteConfirmationModalProps) {
   const [inputValue, setInputValue] = useState("");
+  const [previousIsOpen, setPreviousIsOpen] = useState(isOpen);
 
   // Формируем ожидаемую фразу в зависимости от режима
   const expectedPhrase =
@@ -28,9 +29,10 @@ export function DeleteConfirmationModal({
       : `i delete ${bulkCount} templates`;
 
   // Сбрасываем инпут при закрытии/открытии модалки
-  useEffect(() => {
+  if (previousIsOpen !== isOpen) {
+    setPreviousIsOpen(isOpen);
     if (!isOpen) setInputValue("");
-  }, [isOpen]);
+  }
 
   if (!isOpen) return null;
 

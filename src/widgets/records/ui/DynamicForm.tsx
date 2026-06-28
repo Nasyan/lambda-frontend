@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import type {
+  ColumnMetaResponse,
+  JsonObject,
+  TemplateSchema,
+} from "@/src/entities/template/model/types";
 
 interface DynamicFormProps {
-  schema: Record<string, any>;
-  initialData?: Record<string, any>;
-  onSubmit: (data: Record<string, any>) => void;
+  schema: TemplateSchema;
+  initialData?: JsonObject;
+  onSubmit: (data: JsonObject) => void;
   onCancel: () => void;
   isProcessing?: boolean;
 }
@@ -17,12 +22,14 @@ export function DynamicForm({
   onCancel,
   isProcessing,
 }: DynamicFormProps) {
-  const [formData, setFormData] = useState<Record<string, any>>(initialData);
+  const [formData, setFormData] = useState<JsonObject>(initialData);
+  const [previousInitialData, setPreviousInitialData] = useState(initialData);
 
   // Сброс формы при изменении начальных данных
-  useEffect(() => {
+  if (previousInitialData !== initialData) {
+    setPreviousInitialData(initialData);
     setFormData(initialData);
-  }, [initialData]);
+  }
 
   // Фильтруем системные и скрытые поля
   const formColumns = Object.keys(schema).filter((col) => {
@@ -37,10 +44,12 @@ export function DynamicForm({
     onSubmit(formData);
   };
 
-  const renderField = (col: string, meta: any) => {
+  const renderField = (col: string, meta: ColumnMetaResponse) => {
     const value =
       formData[col] !== undefined ? formData[col] : meta.default || "";
-    const placeholder = meta.placeholder || `Введите ${col}...`;
+    const placeholder = meta.placeholder
+      ? String(meta.placeholder)
+      : `Введите ${col}...`;
     const commonClasses =
       "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50";
 
@@ -56,11 +65,14 @@ export function DynamicForm({
           <option value="" disabled>
             {placeholder}
           </option>
-          {options.map((opt: string) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
+          {options.map((opt) => {
+            const optionValue = String(opt);
+            return (
+              <option key={optionValue} value={optionValue}>
+                {optionValue}
+              </option>
+            );
+          })}
         </select>
       );
     }

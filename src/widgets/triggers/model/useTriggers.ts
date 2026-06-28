@@ -6,10 +6,15 @@ import {
   getInstanceUuidFromAccessToken,
 } from "@/src/shared/lib/session";
 import type {
+  TriggerCreatePayload,
   TriggerResponse,
   EventType,
 } from "@/src/entities/trigger/model/types";
-import { EMPTY_DRAFT } from "./constants";
+import type { JsonValue } from "@/src/entities/template/model/types";
+import { EMPTY_DRAFT, type TriggerDraft } from "./constants";
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Неизвестная ошибка";
 
 export function useTriggers() {
   const router = useRouter();
@@ -22,7 +27,7 @@ export function useTriggers() {
   const [message, setMessage] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<TriggerDraft>(EMPTY_DRAFT);
 
   // Вычисляемые флаги для адаптивного интерфейса
   const isAutomation = draft.trigger_type === "AUTOMATION";
@@ -30,18 +35,29 @@ export function useTriggers() {
   const isCronEvent = isAutomation && draft.event_type === "CRON";
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    const uuid = getInstanceUuidFromAccessToken();
-    if (!uuid) {
-      setError("В access token отсутствует текущий instance_uuid");
-      setLoading(false);
-      return;
-    }
-    setInstanceUuid(uuid);
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+
+      const token = getAccessToken();
+      if (!token) {
+        router.push("/login");
+        return;
+      }
+
+      const uuid = getInstanceUuidFromAccessToken();
+      if (!uuid) {
+        setError("В access token отсутствует текущий instance_uuid");
+        setLoading(false);
+        return;
+      }
+
+      setInstanceUuid(uuid);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const loadTriggers = useCallback(async () => {
@@ -50,23 +66,23 @@ export function useTriggers() {
     try {
       const data = await triggerApi.getTriggers(instanceUuid);
       setTriggers(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
   }, [instanceUuid]);
 
   useEffect(() => {
-    loadTriggers();
+    void Promise.resolve().then(loadTriggers);
   }, [loadTriggers]);
 
-  const parseJsonStr = (str: string, fieldName: string) => {
+  const parseJsonStr = (str: string, fieldName: string): JsonValue | null => {
     const trimmed = str.trim();
     if (!trimmed || trimmed === "null") return null;
     try {
       return JSON.parse(trimmed);
-    } catch (e) {
+    } catch {
       throw new Error(`Ошибка валидации JSON в поле "${fieldName}"`);
     }
   };
@@ -80,7 +96,7 @@ export function useTriggers() {
     setSaving(true);
 
     try {
-      const payload: any = {
+      const payload: TriggerCreatePayload = {
         name: draft.name.trim(),
         trigger_type: draft.trigger_type,
         payload_return_type: draft.payload_return_type,
@@ -122,8 +138,8 @@ export function useTriggers() {
       setDraft(EMPTY_DRAFT);
       setEditingId(null);
       await loadTriggers();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -136,8 +152,8 @@ export function useTriggers() {
       if (editingId === id) cancelEdit();
       setMessage("Триггер удален");
       await loadTriggers();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     }
   };
 
@@ -148,8 +164,8 @@ export function useTriggers() {
     try {
       const res = await triggerApi.executeTrigger(instanceUuid, id);
       setMessage(res.message || "Действие автоматизации исполнено успешно!");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     }
   };
 

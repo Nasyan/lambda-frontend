@@ -18,6 +18,19 @@ interface DataTableProps<T> {
   emptyMessage?: string;
 }
 
+const getCellValue = <T,>(row: T, key: string): unknown => {
+  if (!row || typeof row !== "object") return undefined;
+
+  const rowRecord = row as Record<string, unknown>;
+  const nestedData = rowRecord.data;
+  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+    const nestedValue = (nestedData as Record<string, unknown>)[key];
+    if (nestedValue !== undefined) return nestedValue;
+  }
+
+  return rowRecord[key];
+};
+
 export function DataTable<T>({
   columns,
   data,
@@ -84,8 +97,7 @@ export function DataTable<T>({
 
                   {columns.map((col) => {
                     // Предполагаем, что данные лежат в row.data для динамических таблиц
-                    const cellValue =
-                      (row as any).data?.[col.key] ?? (row as any)[col.key];
+                    const cellValue = getCellValue(row, col.key);
                     return (
                       <td
                         key={col.key}

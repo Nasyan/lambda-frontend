@@ -2,6 +2,9 @@ import { useState } from "react";
 import { analyticsApi } from "@/src/features/analytics/api/analytics-api";
 import type { WidgetDataPoint } from "@/src/entities/analytics/model/types";
 
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Неизвестная ошибка";
+
 export function useChartData(
   instanceUuid: string | null,
   setGlobalError: (err: string | null) => void,
@@ -46,8 +49,8 @@ export function useChartData(
             : dateField || undefined,
       });
       setActiveWidgetData(points);
-    } catch (err: any) {
-      setError(`Ошибка расчета данных: ${err.message}`);
+    } catch (err) {
+      setError(`Ошибка расчета данных: ${getErrorMessage(err)}`);
       setActiveWidgetData(null);
     } finally {
       setLoadingData(false);

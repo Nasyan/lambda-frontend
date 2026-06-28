@@ -22,7 +22,7 @@ export default function EditTemplatePage() {
       try {
         const data = await templateApi.getTemplate(instanceUuid, templateUuid);
         setTemplate(data);
-      } catch (err) {
+      } catch {
         setError("Не удалось загрузить схему No-Code таблицы.");
       } finally {
         setIsLoading(false);

@@ -2,6 +2,7 @@ import { getAccessToken } from "@/src/shared/lib/session";
 import type {
   TriggerResponse,
   TriggerCreatePayload,
+  TriggerExecuteResponse,
   TriggerUpdatePayload,
 } from "@/src/entities/trigger/model/types";
 
@@ -61,7 +62,10 @@ export const triggerApi = {
       method: "DELETE",
     }),
 
-  executeTrigger: (instanceUuid: string, triggerId: string): Promise<any> =>
+  executeTrigger: (
+    instanceUuid: string,
+    triggerId: string,
+  ): Promise<TriggerExecuteResponse> =>
     fetchWithAuth(`/instances/${instanceUuid}/triggers/${triggerId}/execute`, {
       method: "POST",
     }),

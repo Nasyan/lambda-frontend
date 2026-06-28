@@ -3,12 +3,15 @@ import { useRouter } from "next/navigation";
 import {
   EventType,
   PayloadReturnType,
+  TriggerCreatePayload,
   TriggerType,
 } from "@/src/entities/trigger/model/types";
-import { getFieldConfig } from "./triggersFieldsSchema";
+import type { JsonValue } from "@/src/entities/template/model/types";
+import { getFieldConfig, type TriggerFieldName } from "./triggersFieldsSchema";
+import type { TriggerDraft } from "./constants";
 
 // Базовая пустая модель для локального состояния формы (фронтенд-формат)
-const DEFAULT_DRAFT = {
+const DEFAULT_DRAFT: TriggerDraft = {
   name: "",
   trigger_type: "LIVE_EVAL" as TriggerType,
   payload_return_type: "VALUE" as PayloadReturnType,
@@ -24,9 +27,23 @@ const DEFAULT_DRAFT = {
   actionMappingAstJson: "",
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getResponseData = (error: unknown): Record<string, unknown> | null => {
+  if (!isRecord(error)) return null;
+  const response = error.response;
+  if (!isRecord(response)) return null;
+  const data = response.data;
+  return isRecord(data) ? data : null;
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 export function useTriggerEditor(triggerUuid: string | null) {
   const router = useRouter();
-  const [draft, setDraft] = useState(DEFAULT_DRAFT);
+  const [draft, setDraft] = useState<TriggerDraft>(DEFAULT_DRAFT);
   const [loading, setLoading] = useState(!!triggerUuid);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +68,8 @@ export function useTriggerEditor(triggerUuid: string | null) {
         //   actionParamsJson: data.action_params ? JSON.stringify(data.action_params, null, 2) : "",
         //   actionMappingAstJson: data.action_mapping_ast ? JSON.stringify(data.action_mapping_ast, null, 2) : "",
         // });
-      } catch (err: any) {
-        setError(err.message || "Ошибка загрузки триггера");
+      } catch (err) {
+        setError(getErrorMessage(err, "Ошибка загрузки триггера"));
       } finally {
         setLoading(false);
       }
@@ -68,11 +85,14 @@ export function useTriggerEditor(triggerUuid: string | null) {
 
     try {
       // 1. Вспомогательная функция для безопасного парсинга JSON
-      const parseJsonField = (fieldValue: string, fieldName: string) => {
+      const parseJsonField = (
+        fieldValue: string,
+        fieldName: string,
+      ): JsonValue | undefined => {
         if (!fieldValue.trim()) return undefined;
         try {
           return JSON.parse(fieldValue);
-        } catch (e) {
+        } catch {
           throw new Error(
             `Ошибка в синтаксисе JSON для поля "${fieldName}": невалидный формат`,
           );
@@ -80,7 +100,7 @@ export function useTriggerEditor(triggerUuid: string | null) {
       };
 
       // 2. Формируем чистый бэкенд-payload на основе матрицы TRIGGER_FIELDS_SCHEMA
-      const payload: Record<string, any> = {
+      const payload: Partial<TriggerCreatePayload> = {
         name: draft.name,
         trigger_type: draft.trigger_type,
         payload_return_type: draft.payload_return_type,
@@ -166,21 +186,21 @@ export function useTriggerEditor(triggerUuid: string | null) {
       }
 
       router.push("/triggers");
-    } catch (err: any) {
+    } catch (err) {
       // ПРОКАЧАННАЯ ОБРАБОТКА ОШИБОК:
       // Если используешь axios, ошибка бэкенда лежит в err.response.data
-      const responseData = err.response?.data;
+      const responseData = getResponseData(err);
 
-      if (responseData && responseData.details) {
+      if (responseData && isRecord(responseData.details)) {
         // Если бэкенд прислал детализацию (как в твоих тестах)
         const field = responseData.details.field
-          ? `[Поле: ${responseData.details.field}] `
+          ? `[Поле: ${String(responseData.details.field)}] `
           : "";
         const expected = responseData.details.expected
-          ? `Ожидалось: ${responseData.details.expected}. `
+          ? `Ожидалось: ${String(responseData.details.expected)}. `
           : "";
         const got = responseData.details.got
-          ? `Получено: ${responseData.details.got}.`
+          ? `Получено: ${String(responseData.details.got)}.`
           : "";
 
         setError(
@@ -193,19 +213,19 @@ export function useTriggerEditor(triggerUuid: string | null) {
         setError("Ошибка в структуре AST дерева. Проверьте правильность JSON.");
       } else {
         // Фолбек для сетевых ошибок или если это просто throw new Error() из нашего parseJsonField
-        setError(err.message || "Неизвестная ошибка сохранения");
+        setError(getErrorMessage(err, "Неизвестная ошибка сохранения"));
       }
     } finally {
       setSaving(false);
     }
   };
 
-  const updateDraft = (fieldsToUpdate: Partial<typeof DEFAULT_DRAFT>) => {
+  const updateDraft = (fieldsToUpdate: Partial<TriggerDraft>) => {
     setDraft((prev) => ({ ...prev, ...fieldsToUpdate }));
   };
 
-  const checkField = (fieldName: string) =>
-    getFieldConfig(draft, fieldName as any);
+  const checkField = (fieldName: TriggerFieldName) =>
+    getFieldConfig(draft, fieldName);
 
   return {
     draft,

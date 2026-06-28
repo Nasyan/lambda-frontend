@@ -4,10 +4,11 @@ import type {
   PayloadReturnType,
   EventType,
 } from "@/src/entities/trigger/model/types";
+import type { TriggerDraft } from "../model/constants";
 
 interface TriggerFormProps {
-  draft: any; // Замените any на ваш тип Draft/Payload, если он есть
-  setDraft: (draft: any) => void;
+  draft: TriggerDraft;
+  setDraft: (draft: TriggerDraft) => void;
   editingId: string | null;
   saving: boolean;
   isAutomation: boolean;

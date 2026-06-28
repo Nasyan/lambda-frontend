@@ -81,7 +81,7 @@ export function useTables() {
   }, [instanceUuid]);
 
   useEffect(() => {
-    void loadData();
+    void Promise.resolve().then(loadData);
   }, [loadData]);
 
   // Фильтрация списков по поисковому запросу

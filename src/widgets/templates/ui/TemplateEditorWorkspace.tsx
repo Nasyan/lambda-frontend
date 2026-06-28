@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { templateApi } from "@/src/features/templates/api/template-api";
 import { getInstanceUuidFromAccessToken } from "@/src/shared/lib/session";
 import type {
@@ -44,16 +44,49 @@ interface TemplateEditorWorkspaceProps {
   initialData?: TemplateResponse | null;
 }
 
+const buildLocalColumns = (schema: TemplateSchema): LocalColumn[] =>
+  Object.entries(schema).map(([key, meta]) => ({
+    id: `existing-${key}`,
+    dbName: key,
+    type: meta.type,
+    required: !!meta.required,
+    unique: !!meta.unique,
+    options: Array.isArray(meta.options) ? meta.options.map(String) : [],
+    formula_expression:
+      typeof meta.formula_expression === "string" ? meta.formula_expression : "",
+    related_template_uuid: meta.target_template_uuid || "",
+  }));
+
+const createLocalColumnId = (): string => crypto.randomUUID();
+
+const createNewColumnName = (): string =>
+  `new_column_${crypto.randomUUID().replace(/-/g, "").slice(0, 5)}`;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getBackendDetail = (error: unknown): unknown => {
+  if (!isRecord(error)) return undefined;
+  const response = error.response;
+  if (!isRecord(response)) return undefined;
+  const data = response.data;
+  if (!isRecord(data)) return undefined;
+  return data.detail;
+};
+
 export function TemplateEditorWorkspace({
   isEdit = false,
   initialData = null,
 }: TemplateEditorWorkspaceProps) {
   const router = useRouter();
-  const params = useParams();
   const instanceUuid = getInstanceUuidFromAccessToken();
+  const initialSchema = isEdit ? (initialData?.schema ?? null) : null;
 
   const [templateName, setTemplateName] = useState(initialData?.name ?? "");
-  const [columns, setColumns] = useState<LocalColumn[]>([]);
+  const [columns, setColumns] = useState<LocalColumn[]>(() =>
+    initialSchema ? buildLocalColumns(initialSchema) : [],
+  );
+  const [previousInitialSchema, setPreviousInitialSchema] = useState(initialSchema);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [errorNotification, setErrorNotification] = useState<string | null>(
     null,
@@ -64,23 +97,10 @@ export function TemplateEditorWorkspace({
   const [newOptionText, setNewOptionText] = useState("");
 
   // Преобразуем схему с бэкенда в плоский массив для удобства UI
-  useEffect(() => {
-    if (isEdit && initialData?.schema) {
-      const loadedColumns: LocalColumn[] = Object.entries(
-        initialData.schema,
-      ).map(([key, meta]) => ({
-        id: Math.random().toString(36).substring(2, 11),
-        dbName: key,
-        type: meta.type,
-        required: !!meta.required,
-        unique: !!meta.unique,
-        options: Array.isArray(meta.options) ? (meta.options as string[]) : [],
-        formula_expression: (meta.formula_expression as string) || "",
-        related_template_uuid: meta.target_template_uuid || "",
-      }));
-      setColumns(loadedColumns);
-    }
-  }, [isEdit, initialData]);
+  if (previousInitialSchema !== initialSchema) {
+    setPreviousInitialSchema(initialSchema);
+    setColumns(initialSchema ? buildLocalColumns(initialSchema) : []);
+  }
 
   const activeColumn = columns.find((c) => c.id === activeColumnId);
 
@@ -93,7 +113,7 @@ export function TemplateEditorWorkspace({
   // --- ЛОКАЛЬНЫЕ ОБРАБОТЧИКИ ---
   const handleAddColumnLocal = () => {
     const newCol: LocalColumn = {
-      id: Math.random().toString(36).substring(2, 11),
+      id: createLocalColumnId(),
       dbName: `column_${columns.length + 1}`,
       type: "string",
       required: false,
@@ -222,12 +242,12 @@ export function TemplateEditorWorkspace({
         await templateApi.createTemplate(instanceUuid, fullPayload);
         router.push("/tables");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("====== [API ERROR] Save Workspace ======");
       console.error("Full Error Object:", err);
       console.error("========================================");
 
-      const backendDetail = err.response?.data?.detail;
+      const backendDetail = getBackendDetail(err);
       const errorMsg = backendDetail
         ? `Ошибка 400: ${typeof backendDetail === "string" ? backendDetail : JSON.stringify(backendDetail)}`
         : "Не удалось сохранить изменения. Подробности в консоли.";
@@ -241,7 +261,7 @@ export function TemplateEditorWorkspace({
   // --- АТОМАРНЫЕ ОБРАБОТЧИКИ (Оставляем только структурные изменения для режима редактирования) ---
   const handleAddColumnApi = async () => {
     if (!instanceUuid || !initialData) return;
-    const randomName = `new_column_${Math.random().toString(36).substring(2, 7)}`;
+    const randomName = createNewColumnName();
 
     try {
       await templateApi.addColumn(instanceUuid, initialData.id, {
@@ -256,14 +276,14 @@ export function TemplateEditorWorkspace({
       setColumns((prev) => [
         ...prev,
         {
-          id: Math.random().toString(36).substring(2, 11),
+          id: createLocalColumnId(),
           dbName: randomName,
           type: "string",
           required: false,
           unique: false,
         },
       ]);
-    } catch (err: any) {
+    } catch {
       showError("Не удалось добавить колонку.");
     }
   };
@@ -274,7 +294,7 @@ export function TemplateEditorWorkspace({
       await templateApi.deleteColumn(instanceUuid, initialData.id, dbName);
       if (activeColumnId === id) setActiveColumnId(null);
       setColumns((prev) => prev.filter((c) => c.id !== id));
-    } catch (err: any) {
+    } catch {
       showError(
         "Нельзя удалить колонку, так как таблица уже содержит связанные записи.",
       );
@@ -625,7 +645,7 @@ export function TemplateEditorWorkspace({
               <div className="text-center py-8 text-gray-400 text-sm">
                 Для типа поля{" "}
                 <span className="font-mono text-gray-600">
-                  "{activeColumn.type}"
+                  &quot;{activeColumn.type}&quot;
                 </span>{" "}
                 дополнительные параметры конфигурации настраивать не требуется.
               </div>

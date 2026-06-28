@@ -1,3 +1,5 @@
+import type { JsonValue } from "@/src/entities/template/model/types";
+
 export type WidgetType = "BAR" | "LINE" | "PIE" | "KPI" | "AREA";
 export type AggregationFunction = "COUNT" | "SUM" | "AVG" | "MIN" | "MAX";
 export type AxisXType = "categorical" | "datetime" | "numerical";
@@ -33,7 +35,7 @@ export interface WidgetResponse {
   name: string;
   target_template_uuid: string; // UUID
   widget_type: WidgetType;
-  ast_filter: Record<string, any> | null;
+  ast_filter: JsonValue | null;
   chart_config: ChartConfigPayload;
 }
 
@@ -42,10 +44,10 @@ export interface WidgetCreatePayload {
   target_template_uuid: string;
   widget_type: WidgetType;
   chart_config: ChartConfigPayload;
-  ast_filter?: Record<string, any> | null;
+  ast_filter?: JsonValue | null;
 }
 
-export interface WidgetUpdatePayload extends Partial<WidgetCreatePayload> {}
+export type WidgetUpdatePayload = Partial<WidgetCreatePayload>;
 
 export interface WidgetDataPoint {
   label: string | number;

@@ -1,13 +1,17 @@
 import { TriggerType } from "@/src/entities/trigger/model/types";
+import type { JsonValue } from "@/src/entities/template/model/types";
+import type { TriggerDraft } from "./constants";
 
 export interface FieldConfig {
   visible: boolean;
   required: boolean;
-  defaultValue?: any;
+  defaultValue?: JsonValue;
 }
 
 // Позволяет задавать конфиг статично или динамически (в зависимости от состояния формы)
-export type FieldConfigOrResolver = FieldConfig | ((draft: any) => FieldConfig);
+export type FieldConfigOrResolver =
+  | FieldConfig
+  | ((draft: TriggerDraft) => FieldConfig);
 
 export interface TriggerTypeConfig {
   fields: {
@@ -23,6 +27,8 @@ export interface TriggerTypeConfig {
     actionMappingAstJson: FieldConfigOrResolver;
   };
 }
+
+export type TriggerFieldName = keyof TriggerTypeConfig["fields"];
 
 export const TRIGGER_FIELDS_SCHEMA: Record<TriggerType, TriggerTypeConfig> = {
   LIVE_EVAL: {
@@ -93,10 +99,10 @@ export const TRIGGER_FIELDS_SCHEMA: Record<TriggerType, TriggerTypeConfig> = {
  * Если поле описано функцией (зависит от других полей), она автоматически её выполнит.
  */
 export function getFieldConfig(
-  draft: any,
-  fieldName: keyof TriggerTypeConfig["fields"],
+  draft: TriggerDraft,
+  fieldName: TriggerFieldName,
 ): FieldConfig {
-  const typeConfig = TRIGGER_FIELDS_SCHEMA[draft.trigger_type as TriggerType];
+  const typeConfig = TRIGGER_FIELDS_SCHEMA[draft.trigger_type];
 
   if (!typeConfig) {
     return { visible: false, required: false };

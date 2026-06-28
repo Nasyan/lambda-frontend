@@ -37,7 +37,6 @@ export function AnalyticsWorkspace() {
     activeWidgetId,
     loadingData,
     error: chartError,
-    setError: setChartError,
     handleApplyFilters,
     fetchChartData,
     handleExportCsv,

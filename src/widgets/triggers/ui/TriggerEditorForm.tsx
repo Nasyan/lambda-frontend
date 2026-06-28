@@ -7,11 +7,16 @@ import {
   PayloadReturnType,
   TriggerType,
 } from "@/src/entities/trigger/model/types";
+import type {
+  FieldConfig,
+  TriggerFieldName,
+} from "../model/triggersFieldsSchema";
+import type { TriggerDraft } from "../model/constants";
 
 interface TriggerEditorFormProps {
-  draft: any;
-  updateDraft: (update: any) => void;
-  checkField: (fieldName: string) => { visible: boolean; required: boolean };
+  draft: TriggerDraft;
+  updateDraft: (update: Partial<TriggerDraft>) => void;
+  checkField: (fieldName: TriggerFieldName) => FieldConfig;
   saving: boolean;
   handleSave: (e: React.FormEvent) => void;
   isEditMode: boolean;
