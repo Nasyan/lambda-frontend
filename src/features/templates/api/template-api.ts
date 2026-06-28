@@ -41,7 +41,9 @@ const normalizeTemplate = (template: TemplateDto): TemplateResponse => {
 
 export const templateApi = {
   async getTemplates(instanceUuid: string): Promise<TemplateResponse[]> {
-    const response = await apiClient.get<TemplateDto[]>(templatesPath(instanceUuid));
+    const response = await apiClient.get<TemplateDto[]>(
+      templatesPath(instanceUuid),
+    );
     return response.data.map(normalizeTemplate);
   },
 
@@ -85,8 +87,20 @@ export const templateApi = {
     return normalizeTemplate(response.data);
   },
 
-  async deleteTemplate(instanceUuid: string, templateUuid: string): Promise<void> {
+  // Мягкое удаление (перенос в корзину)
+  async deleteTemplate(
+    instanceUuid: string,
+    templateUuid: string,
+  ): Promise<void> {
     await apiClient.delete(templatePath(instanceUuid, templateUuid));
+  },
+
+  // НОВЫЙ МЕТОД: Безвозвратное жесткое удаление из корзины с каскадом
+  async forceDeleteTemplate(
+    instanceUuid: string,
+    templateUuid: string,
+  ): Promise<void> {
+    await apiClient.delete(`${templatePath(instanceUuid, templateUuid)}/force`);
   },
 
   async restoreTemplate(

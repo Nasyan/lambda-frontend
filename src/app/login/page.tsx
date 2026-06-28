@@ -20,9 +20,13 @@ export default function Login() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await apiClient.post<{ access_token: string }>("/auth/login/", formData, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+      const response = await apiClient.post<{ access_token: string }>(
+        "/auth/login/",
+        formData,
+        {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        },
+      );
 
       localStorage.setItem("access_token", response.data.access_token);
       router.push("/"); // Кидаем на главную CRM
@@ -33,26 +37,41 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <form onSubmit={handleLogin} className="p-8 bg-white shadow-md rounded flex flex-col gap-4 w-96">
+      <form
+        onSubmit={handleLogin}
+        className="p-8 bg-white shadow-md rounded flex flex-col gap-4 w-96"
+      >
         <h1 className="text-2xl font-bold text-center">Вход в CRM</h1>
         {error && <p className="text-red-500 text-sm">{error}</p>}
-        
+
         <input
-          type="email" placeholder="Email"
+          type="email"
+          placeholder="Email"
           className="border p-2 rounded"
-          value={email} onChange={(e) => setEmail(e.target.value)} required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
         />
         <input
-          type="password" placeholder="Пароль"
+          type="password"
+          placeholder="Пароль"
           className="border p-2 rounded"
-          value={password} onChange={(e) => setPassword(e.target.value)} required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
         />
-        
-        <button type="submit" className="bg-indigo-600 text-white p-2 rounded hover:bg-indigo-700">
+
+        <button
+          type="submit"
+          className="bg-indigo-600 text-white p-2 rounded hover:bg-indigo-700"
+        >
           Войти
         </button>
         <div className="text-sm text-center mt-2">
-          Нет аккаунта? <Link href="/register" className="text-blue-500 hover:underline">Регистрация по инвайту</Link>
+          Нет аккаунта?{" "}
+          <Link href="/register" className="text-blue-500 hover:underline">
+            Регистрация по инвайту
+          </Link>
         </div>
       </form>
     </div>

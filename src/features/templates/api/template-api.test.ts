@@ -50,12 +50,21 @@ describe("templateApi", () => {
     post.mockResolvedValue({ data: rawTemplate });
     const payload = { name: "Leads", schema: {} };
     await templateApi.createTemplate(INSTANCE, payload);
-    expect(post).toHaveBeenCalledWith(`/instances/${INSTANCE}/templates`, payload);
+    expect(post).toHaveBeenCalledWith(
+      `/instances/${INSTANCE}/templates`,
+      payload,
+    );
   });
 
   it("normalizes _id and schema_definition fallbacks", async () => {
     get.mockResolvedValue({
-      data: { ...rawTemplate, id: undefined, _id: "alt-id", schema: undefined, schema_definition: { x: 1 } },
+      data: {
+        ...rawTemplate,
+        id: undefined,
+        _id: "alt-id",
+        schema: undefined,
+        schema_definition: { x: 1 },
+      },
     });
     const result = await templateApi.getTemplate(INSTANCE, TEMPLATE);
     expect(result.id).toBe("alt-id");
@@ -63,13 +72,20 @@ describe("templateApi", () => {
   });
 
   it("throws when the template response has no id", async () => {
-    get.mockResolvedValue({ data: { ...rawTemplate, id: undefined, _id: undefined } });
-    await expect(templateApi.getTemplate(INSTANCE, TEMPLATE)).rejects.toThrow(/does not contain id/);
+    get.mockResolvedValue({
+      data: { ...rawTemplate, id: undefined, _id: undefined },
+    });
+    await expect(templateApi.getTemplate(INSTANCE, TEMPLATE)).rejects.toThrow(
+      /does not contain id/,
+    );
   });
 
   it("addColumn posts to the columns path", async () => {
     post.mockResolvedValue({ data: rawTemplate });
-    const colPayload = { column_name: "email", field_meta: { type: "string" as const } };
+    const colPayload = {
+      column_name: "email",
+      field_meta: { type: "string" as const },
+    };
     await templateApi.addColumn(INSTANCE, TEMPLATE, colPayload);
     expect(post).toHaveBeenCalledWith(
       `/instances/${INSTANCE}/templates/${TEMPLATE}/columns`,
@@ -80,6 +96,8 @@ describe("templateApi", () => {
   it("deleteTemplate calls delete on the template path", async () => {
     del.mockResolvedValue({ data: undefined });
     await templateApi.deleteTemplate(INSTANCE, TEMPLATE);
-    expect(del).toHaveBeenCalledWith(`/instances/${INSTANCE}/templates/${TEMPLATE}`);
+    expect(del).toHaveBeenCalledWith(
+      `/instances/${INSTANCE}/templates/${TEMPLATE}`,
+    );
   });
 });

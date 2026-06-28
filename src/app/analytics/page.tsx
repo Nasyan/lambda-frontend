@@ -1,12 +1,11 @@
-import { AppSidebar } from "@/src/widgets/app-sidebar/ui/AppSidebar";
+import { AnalyticsWorkspace } from "@/src/widgets/analytics/ui/AnalyticsWorkspace";
+
+export const metadata = {
+  title: "Аналитика и OLAP-дашборды | Lambda Engine",
+  description:
+    "Управление виджетами, агрегация данных MongoDB на лету и экспорт отчетов",
+};
 
 export default function AnalyticsPage() {
-  return (
-    <div className="min-h-screen bg-gray-50 text-gray-950 md:flex">
-      <AppSidebar />
-      <main className="flex-1 p-6">
-        <h1 className="text-2xl font-bold">Analytics</h1>
-      </main>
-    </div>
-  );
+  return <AnalyticsWorkspace />;
 }

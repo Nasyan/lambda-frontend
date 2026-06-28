@@ -20,9 +20,13 @@ export default function AdminLogin() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const response = await apiClient.post<{ access_token: string }>("/admin/login/", formData, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
+      const response = await apiClient.post<{ access_token: string }>(
+        "/admin/login/",
+        formData,
+        {
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        },
+      );
 
       // Сохраняем токен и редиректим в админку
       localStorage.setItem("access_token", response.data.access_token);
@@ -34,11 +38,14 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form onSubmit={handleLogin} className="p-8 bg-white shadow-md rounded flex flex-col gap-4 w-96">
+      <form
+        onSubmit={handleLogin}
+        className="p-8 bg-white shadow-md rounded flex flex-col gap-4 w-96"
+      >
         <h1 className="text-2xl font-bold text-center">Вход Админа</h1>
-        
+
         {error && <p className="text-red-500 text-sm">{error}</p>}
-        
+
         <input
           type="email"
           placeholder="Email"
@@ -55,8 +62,11 @@ export default function AdminLogin() {
           onChange={(e) => setPassword(e.target.value)}
           required
         />
-        
-        <button type="submit" className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+
+        <button
+          type="submit"
+          className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+        >
           Войти
         </button>
       </form>

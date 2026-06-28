@@ -1,5 +1,5 @@
-import { TemplatesWorkspace } from "@/src/widgets/templates/ui/TemplatesWorkspace";
+import { TablesWorkspace } from "@/src/widgets/templates/ui/TemplatesWorkspace";
 
 export default function TablesPage() {
-  return <TemplatesWorkspace />;
+  return <TablesWorkspace />;
 }
