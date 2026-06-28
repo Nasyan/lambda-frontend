@@ -36,6 +36,10 @@ interface DynamicFormProps {
   onSubmit: (data: JsonObject) => void;
   onCancel: () => void;
   isProcessing?: boolean;
+  /** Срабатывает при каждом изменении поля — для live-синхронизации черновика. */
+  onChange?: (data: JsonObject) => void;
+  /** Скрыть встроенные кнопки submit/cancel (когда панель действий — снаружи). */
+  hideActions?: boolean;
 }
 
 interface RelationOption {
@@ -191,6 +195,25 @@ const getRelationOptionHint = (record: RecordResponse): string => {
   return dataPreview ? `${dataPreview} · ${id}` : id;
 };
 
+const renderTriggerHints = (meta: ColumnMetaResponse): ReactNode => {
+  const triggers = meta.triggers ?? [];
+  if (triggers.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      {triggers.map((trigger) => (
+        <p
+          key={trigger.trigger_id}
+          className="text-xs font-medium text-amber-600"
+        >
+          ⚡ live-eval: {trigger.trigger_type} · {trigger.event}
+          {trigger.target_field ? ` → ${trigger.target_field}` : ""}
+        </p>
+      ))}
+    </div>
+  );
+};
+
 const buildRelationOptions = (
   records: RecordResponse[],
   targetSchema?: TemplateSchema,
@@ -210,6 +233,8 @@ export function DynamicForm({
   onSubmit,
   onCancel,
   isProcessing,
+  onChange,
+  hideActions,
 }: DynamicFormProps) {
   const [formData, setFormData] = useState<JsonObject>(initialData);
   const [previousInitialData, setPreviousInitialData] = useState(initialData);
@@ -302,7 +327,11 @@ export function DynamicForm({
   });
 
   const updateField = (fieldName: string, value: JsonValue) => {
-    setFormData((prev) => ({ ...prev, [fieldName]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [fieldName]: value };
+      onChange?.(next);
+      return next;
+    });
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -754,6 +783,7 @@ export function DynamicForm({
                   {meta?.required && <span className="text-red-500">*</span>}
                 </span>
               </label>
+              {meta && renderTriggerHints(meta)}
               {renderField(col, meta)}
               {meta?.description && (
                 <p className="text-xs text-gray-400">{meta.description}</p>
@@ -763,23 +793,25 @@ export function DynamicForm({
         })
       )}
 
-      <div className="mt-4 flex justify-end gap-3 border-t border-gray-100 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={isProcessing}
-          className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-        >
-          Отмена
-        </button>
-        <button
-          type="submit"
-          disabled={isProcessing}
-          className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-        >
-          {isProcessing ? "Сохранение..." : "Сохранить"}
-        </button>
-      </div>
+      {!hideActions && (
+        <div className="mt-4 flex justify-end gap-3 border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          >
+            Отмена
+          </button>
+          <button
+            type="submit"
+            disabled={isProcessing}
+            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {isProcessing ? "Сохранение..." : "Сохранить"}
+          </button>
+        </div>
+      )}
     </form>
   );
 }
