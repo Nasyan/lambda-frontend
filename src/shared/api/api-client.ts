@@ -1,7 +1,5 @@
 import { isTokenExpired } from "../lib/session"; // Убедись, что путь правильный
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
-
 interface ApiRequestConfig {
   headers?: HeadersInit;
 }
@@ -30,7 +28,7 @@ export const isApiClientError = (error: unknown): error is ApiClientError =>
 
 const buildUrl = (path: string): string => {
   if (/^https?:\/\//.test(path)) return path;
-  return `${API_URL}${path}`;
+  return path.startsWith("/") ? path : `/${path}`;
 };
 
 const parseResponseData = async (response: Response): Promise<unknown> => {

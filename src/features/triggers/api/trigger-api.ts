@@ -6,8 +6,6 @@ import type {
   TriggerUpdatePayload,
 } from "@/src/entities/trigger/model/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = getAccessToken();
   if (!token) throw new Error("Нет токена авторизации");
@@ -18,7 +16,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     ...options.headers,
   };
 
-  const response = await fetch(`${API_URL}${url}`, { ...options, headers });
+  const response = await fetch(url, { ...options, headers });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
