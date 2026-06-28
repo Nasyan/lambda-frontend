@@ -23,7 +23,11 @@ const getCellValue = <T,>(row: T, key: string): unknown => {
 
   const rowRecord = row as Record<string, unknown>;
   const nestedData = rowRecord.data;
-  if (nestedData && typeof nestedData === "object" && !Array.isArray(nestedData)) {
+  if (
+    nestedData &&
+    typeof nestedData === "object" &&
+    !Array.isArray(nestedData)
+  ) {
     const nestedValue = (nestedData as Record<string, unknown>)[key];
     if (nestedValue !== undefined) return nestedValue;
   }

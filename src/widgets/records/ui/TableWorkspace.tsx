@@ -8,7 +8,10 @@ import {
   type RecordResponse,
 } from "@/src/features/records/api/record-api";
 import { getInstanceUuidFromAccessToken } from "@/src/shared/lib/session";
-import type { JsonObject, TemplateResponse } from "@/src/entities/template/model/types";
+import type {
+  JsonObject,
+  TemplateResponse,
+} from "@/src/entities/template/model/types";
 import { AppSidebar } from "@/src/widgets/app-sidebar/ui/AppSidebar";
 import { ColumnDef, DataTable } from "./DataTable";
 import { Modal } from "./Modal";
@@ -224,10 +227,7 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
           onToggleSelectAll={() => {
             if (selectedIds.size === currentList.length)
               setSelectedIds(new Set());
-            else
-              setSelectedIds(
-                new Set(currentList.map(getRecordId)),
-              );
+            else setSelectedIds(new Set(currentList.map(getRecordId)));
           }}
           renderActions={(row) => {
             const rId = getRecordId(row);

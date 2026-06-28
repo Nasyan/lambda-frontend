@@ -53,7 +53,9 @@ const buildLocalColumns = (schema: TemplateSchema): LocalColumn[] =>
     unique: !!meta.unique,
     options: Array.isArray(meta.options) ? meta.options.map(String) : [],
     formula_expression:
-      typeof meta.formula_expression === "string" ? meta.formula_expression : "",
+      typeof meta.formula_expression === "string"
+        ? meta.formula_expression
+        : "",
     related_template_uuid: meta.target_template_uuid || "",
   }));
 
@@ -86,7 +88,8 @@ export function TemplateEditorWorkspace({
   const [columns, setColumns] = useState<LocalColumn[]>(() =>
     initialSchema ? buildLocalColumns(initialSchema) : [],
   );
-  const [previousInitialSchema, setPreviousInitialSchema] = useState(initialSchema);
+  const [previousInitialSchema, setPreviousInitialSchema] =
+    useState(initialSchema);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
   const [errorNotification, setErrorNotification] = useState<string | null>(
     null,
