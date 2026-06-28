@@ -8,6 +8,14 @@ export type JsonValue =
 
 export type JsonObject = { [key: string]: JsonValue };
 
+export type UiWidget =
+  | "qr"
+  | "camera_capture"
+  | "file_upload"
+  | "geo_point"
+  | "phone_mask"
+  | "color_picker";
+
 export type TemplateFieldType =
   | "string"
   | "number"
@@ -22,6 +30,14 @@ export type TemplateFieldType =
   | "relation_list"
   | "cascading_tree";
 
+export type CascadingTreeNodeType = "adaptive" | "fixed";
+
+export type CascadingTreeConfig = {
+  floor_name: string;
+  type?: CascadingTreeNodeType;
+  options: Record<string, CascadingTreeConfig | null>;
+};
+
 export interface TriggerMetaResponse {
   trigger_id: string;
   trigger_type: string;
@@ -34,17 +50,23 @@ export interface ColumnMetaResponse {
   type: TemplateFieldType;
   required?: boolean;
   ast?: JsonObject | null;
-  options?: JsonValue;
+  options?: string[];
   triggers?: TriggerMetaResponse[];
-  ui_widget?: string | null;
+  ui_widget?: UiWidget | null;
   default?: JsonValue;
   indexed?: boolean;
   unique?: boolean;
   nullable?: boolean;
   description?: string;
   target_template_uuid?: string;
-  tree_config?: JsonValue;
-  [key: string]: JsonValue | TriggerMetaResponse[] | undefined;
+  tree_config?: CascadingTreeConfig;
+  hidden?: boolean;
+  placeholder?: string;
+  [key: string]:
+    | JsonValue
+    | TriggerMetaResponse[]
+    | CascadingTreeConfig
+    | undefined;
 }
 
 export type TemplateSchema = Record<string, ColumnMetaResponse>;

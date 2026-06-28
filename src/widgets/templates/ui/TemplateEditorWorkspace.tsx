@@ -1,65 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { templateApi } from "@/src/features/templates/api/template-api";
 import { getInstanceUuidFromAccessToken } from "@/src/shared/lib/session";
 import type {
   TemplateResponse,
   TemplateFieldType,
-  ColumnMetaResponse,
   TemplateSchema,
 } from "@/src/entities/template/model/types";
+import { COLUMN_TYPE_OPTIONS } from "@/src/entities/template/model/field-registry";
+import {
+  applyColumnTypeDefaults,
+  buildColumnMeta,
+  buildEditorColumns,
+  createEditorColumn,
+  type TemplateEditorColumn,
+} from "../model/column-editor";
 import { AppSidebar } from "../../app-sidebar/ui/AppSidebar";
-
-// Список доступных типов колонок, замаппленный на бэкенд стратегии
-const COLUMN_TYPES: { value: TemplateFieldType; label: string }[] = [
-  { value: "string", label: "Текст (string)" },
-  { value: "number", label: "Число (number)" },
-  { value: "boolean", label: "Логическое (boolean)" },
-  { value: "checkbox", label: "Флажок (checkbox)" },
-  { value: "select", label: "Выбор (select)" },
-  { value: "image", label: "Изображение (image)" },
-  { value: "formula", label: "Формула (formula)" },
-  { value: "datetime", label: "Дата и время (datetime)" },
-  { value: "url", label: "Ссылка (url)" },
-  { value: "phone", label: "Телефон (phone)" },
-  { value: "relation_list", label: "Список связей (relation_list)" },
-  { value: "cascading_tree", label: "Каскадное дерево (cascading_tree)" },
-];
-
-interface LocalColumn {
-  id: string;
-  dbName: string;
-  type: TemplateFieldType;
-  required: boolean;
-  unique: boolean;
-  options?: string[];
-  formula_expression?: string;
-  related_template_uuid?: string;
-}
+import { ColumnConfigPanel } from "./ColumnConfigPanel";
 
 interface TemplateEditorWorkspaceProps {
   isEdit?: boolean;
   initialData?: TemplateResponse | null;
 }
-
-const buildLocalColumns = (schema: TemplateSchema): LocalColumn[] =>
-  Object.entries(schema).map(([key, meta]) => ({
-    id: `existing-${key}`,
-    dbName: key,
-    type: meta.type,
-    required: !!meta.required,
-    unique: !!meta.unique,
-    options: Array.isArray(meta.options) ? meta.options.map(String) : [],
-    formula_expression:
-      typeof meta.formula_expression === "string"
-        ? meta.formula_expression
-        : "",
-    related_template_uuid: meta.target_template_uuid || "",
-  }));
-
-const createLocalColumnId = (): string => crypto.randomUUID();
 
 const createNewColumnName = (): string =>
   `new_column_${crypto.randomUUID().replace(/-/g, "").slice(0, 5)}`;
@@ -85,8 +49,8 @@ export function TemplateEditorWorkspace({
   const initialSchema = isEdit ? (initialData?.schema ?? null) : null;
 
   const [templateName, setTemplateName] = useState(initialData?.name ?? "");
-  const [columns, setColumns] = useState<LocalColumn[]>(() =>
-    initialSchema ? buildLocalColumns(initialSchema) : [],
+  const [columns, setColumns] = useState<TemplateEditorColumn[]>(() =>
+    initialSchema ? buildEditorColumns(initialSchema) : [],
   );
   const [previousInitialSchema, setPreviousInitialSchema] =
     useState(initialSchema);
@@ -95,17 +59,39 @@ export function TemplateEditorWorkspace({
     null,
   );
   const [isSaving, setIsSaving] = useState(false);
-
-  // Кастомный стейт для добавления новой опции в сайдбаре селекта
-  const [newOptionText, setNewOptionText] = useState("");
+  const [availableTemplates, setAvailableTemplates] = useState<
+    TemplateResponse[]
+  >([]);
 
   // Преобразуем схему с бэкенда в плоский массив для удобства UI
   if (previousInitialSchema !== initialSchema) {
     setPreviousInitialSchema(initialSchema);
-    setColumns(initialSchema ? buildLocalColumns(initialSchema) : []);
+    setColumns(initialSchema ? buildEditorColumns(initialSchema) : []);
   }
 
   const activeColumn = columns.find((c) => c.id === activeColumnId);
+
+  useEffect(() => {
+    if (!instanceUuid) return;
+    let cancelled = false;
+
+    const loadTemplates = async () => {
+      try {
+        const templates = await templateApi.getTemplates(instanceUuid);
+        if (!cancelled) {
+          setAvailableTemplates(templates);
+        }
+      } catch (error) {
+        console.error("Не удалось загрузить список таблиц:", error);
+      }
+    };
+
+    void Promise.resolve().then(loadTemplates);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceUuid]);
 
   // Показ временных уведомлений об ошибках от бэкенда
   const showError = (message: string) => {
@@ -115,20 +101,15 @@ export function TemplateEditorWorkspace({
 
   // --- ЛОКАЛЬНЫЕ ОБРАБОТЧИКИ ---
   const handleAddColumnLocal = () => {
-    const newCol: LocalColumn = {
-      id: createLocalColumnId(),
-      dbName: `column_${columns.length + 1}`,
-      type: "string",
-      required: false,
-      unique: false,
-      options: [],
-    };
-    setColumns((prev) => [...prev, newCol]);
+    setColumns((prev) => [
+      ...prev,
+      createEditorColumn(`column_${prev.length + 1}`),
+    ]);
   };
 
   const handleUpdateColumnLocal = (
     id: string,
-    fields: Partial<LocalColumn>,
+    fields: Partial<TemplateEditorColumn>,
   ) => {
     setColumns((prev) =>
       prev.map((col) => (col.id === id ? { ...col, ...fields } : col)),
@@ -160,9 +141,27 @@ export function TemplateEditorWorkspace({
       return;
     }
 
+    const trimmedDbNames = columns.map((column) => column.dbName.trim());
+    if (new Set(trimmedDbNames).size !== trimmedDbNames.length) {
+      showError("Системные имена колонок не должны повторяться");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
+      const columnPayloads = columns.map((col) => {
+        const builtMeta = buildColumnMeta(col);
+        if (!builtMeta.ok) {
+          throw new Error(builtMeta.message);
+        }
+
+        return {
+          column_name: col.dbName.trim(),
+          field_meta: builtMeta.meta,
+        };
+      });
+
       if (isEdit && initialData) {
         // --- РЕЖИМ РЕДАКТИРОВАНИЯ ---
         // 1. Обновляем имя таблицы, если оно изменилось
@@ -173,68 +172,17 @@ export function TemplateEditorWorkspace({
         }
 
         // 2. Параллельно обновляем метаданные всех колонок
-        const updatePromises = columns.map((col) => {
-          const meta: ColumnMetaResponse = {
-            type: col.type,
-            required: col.required,
-            unique: col.unique,
-          };
-
-          if (col.type === "select" && col.options && col.options.length > 0) {
-            meta.options = col.options;
-          }
-
-          if (
-            col.type === "relation_list" &&
-            col.related_template_uuid?.trim()
-          ) {
-            meta.target_template_uuid = col.related_template_uuid.trim();
-          }
-
-          if (col.type === "formula" && col.formula_expression?.trim()) {
-            meta.formula_expression = col.formula_expression.trim();
-          }
-
-          const columnPayload = {
-            column_name: col.dbName.trim(),
-            field_meta: meta,
-          };
-
-          return templateApi.updateColumn(
-            instanceUuid,
-            initialData.id,
-            columnPayload,
-          );
-        });
+        const updatePromises = columnPayloads.map((columnPayload) =>
+          templateApi.updateColumn(instanceUuid, initialData.id, columnPayload),
+        );
 
         await Promise.all(updatePromises);
         router.push("/tables");
       } else {
         // --- РЕЖИМ СОЗДАНИЯ ---
         const schemaPayload: TemplateSchema = {};
-        columns.forEach((col) => {
-          const meta: ColumnMetaResponse = {
-            type: col.type,
-            required: col.required,
-            unique: col.unique,
-          };
-
-          if (col.type === "select" && col.options && col.options.length > 0) {
-            meta.options = col.options;
-          }
-
-          if (
-            col.type === "relation_list" &&
-            col.related_template_uuid?.trim()
-          ) {
-            meta.target_template_uuid = col.related_template_uuid.trim();
-          }
-
-          if (col.type === "formula" && col.formula_expression?.trim()) {
-            meta.formula_expression = col.formula_expression.trim();
-          }
-
-          schemaPayload[col.dbName.trim()] = meta;
+        columnPayloads.forEach((columnPayload) => {
+          schemaPayload[columnPayload.column_name] = columnPayload.field_meta;
         });
 
         const fullPayload = {
@@ -253,7 +201,9 @@ export function TemplateEditorWorkspace({
       const backendDetail = getBackendDetail(err);
       const errorMsg = backendDetail
         ? `Ошибка 400: ${typeof backendDetail === "string" ? backendDetail : JSON.stringify(backendDetail)}`
-        : "Не удалось сохранить изменения. Подробности в консоли.";
+        : err instanceof Error
+          ? err.message
+          : "Не удалось сохранить изменения. Подробности в консоли.";
 
       showError(errorMsg);
     } finally {
@@ -279,11 +229,8 @@ export function TemplateEditorWorkspace({
       setColumns((prev) => [
         ...prev,
         {
-          id: createLocalColumnId(),
+          ...createEditorColumn(randomName),
           dbName: randomName,
-          type: "string",
-          required: false,
-          unique: false,
         },
       ]);
     } catch {
@@ -392,11 +339,14 @@ export function TemplateEditorWorkspace({
                       value={col.type}
                       onChange={(e) => {
                         const nextType = e.target.value as TemplateFieldType;
-                        handleUpdateColumnLocal(col.id, { type: nextType });
+                        handleUpdateColumnLocal(
+                          col.id,
+                          applyColumnTypeDefaults(col, nextType),
+                        );
                       }}
                       className="bg-gray-100 border border-transparent text-gray-700 text-xs rounded-full px-3 py-1 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     >
-                      {COLUMN_TYPES.map((t) => (
+                      {COLUMN_TYPE_OPTIONS.map((t) => (
                         <option key={t.value} value={t.value}>
                           {t.label}
                         </option>
@@ -501,160 +451,18 @@ export function TemplateEditorWorkspace({
       </div>
 
       {activeColumn && (
-        <div className="w-96 bg-white border-l border-gray-200 shadow-xl flex flex-col z-20 transition-transform duration-300">
-          <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-            <div>
-              <h3 className="font-semibold text-gray-900">Настройки поля</h3>
-              <p className="text-xs font-mono text-indigo-600 mt-1">
-                {activeColumn.dbName} ({activeColumn.type})
-              </p>
-            </div>
-            <button
-              onClick={() => setActiveColumnId(null)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="p-6 flex-1 overflow-y-auto space-y-6">
-            {activeColumn.type === "select" && (
-              <div className="space-y-4">
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Варианты выбора (Options)
-                </label>
-                <div className="space-y-2">
-                  {activeColumn.options?.map((option, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between bg-gray-50 px-3 py-1.5 rounded border border-gray-200 text-sm"
-                    >
-                      <span className="text-gray-800">{option}</span>
-                      <button
-                        onClick={() => {
-                          const nextOpts =
-                            activeColumn.options?.filter(
-                              (_, i) => i !== index,
-                            ) || [];
-                          handleUpdateColumnLocal(activeColumn.id, {
-                            options: nextOpts,
-                          });
-                        }}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={newOptionText}
-                    onChange={(e) => setNewOptionText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (!newOptionText.trim()) return;
-                        const nextOpts = [
-                          ...(activeColumn.options || []),
-                          newOptionText.trim(),
-                        ];
-                        handleUpdateColumnLocal(activeColumn.id, {
-                          options: nextOpts,
-                        });
-                        setNewOptionText("");
-                      }
-                    }}
-                    placeholder="Новый вариант"
-                    className="flex-1 text-sm border border-gray-300 rounded px-3 py-1.5 focus:outline-none focus:border-indigo-500"
-                  />
-                  <button
-                    onClick={() => {
-                      if (!newOptionText.trim()) return;
-                      const nextOpts = [
-                        ...(activeColumn.options || []),
-                        newOptionText.trim(),
-                      ];
-                      handleUpdateColumnLocal(activeColumn.id, {
-                        options: nextOpts,
-                      });
-                      setNewOptionText("");
-                    }}
-                    className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-gray-800"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {activeColumn.type === "formula" && (
-              <div className="space-y-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Выражение формулы
-                </label>
-                <textarea
-                  value={activeColumn.formula_expression || ""}
-                  onChange={(e) =>
-                    handleUpdateColumnLocal(activeColumn.id, {
-                      formula_expression: e.target.value,
-                    })
-                  }
-                  placeholder="e.g. {price} * {quantity}"
-                  className="w-full text-sm font-mono border border-gray-300 rounded p-2 h-24 focus:outline-none focus:border-indigo-500"
-                />
-                <p className="text-xs text-gray-400">
-                  Используйте названия других полей в фигурных скобках для
-                  расчетов.
-                </p>
-              </div>
-            )}
-
-            {activeColumn.type === "relation_list" && (
-              <div className="space-y-2">
-                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Связать с No-Code таблицей
-                </label>
-                <input
-                  type="text"
-                  value={activeColumn.related_template_uuid || ""}
-                  onChange={(e) =>
-                    handleUpdateColumnLocal(activeColumn.id, {
-                      related_template_uuid: e.target.value,
-                    })
-                  }
-                  placeholder="Вставьте UUID целевой таблицы"
-                  className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            )}
-
-            {!["select", "formula", "relation_list"].includes(
-              activeColumn.type,
-            ) && (
-              <div className="text-center py-8 text-gray-400 text-sm">
-                Для типа поля{" "}
-                <span className="font-mono text-gray-600">
-                  &quot;{activeColumn.type}&quot;
-                </span>{" "}
-                дополнительные параметры конфигурации настраивать не требуется.
-              </div>
-            )}
-          </div>
-        </div>
+        <ColumnConfigPanel
+          column={activeColumn}
+          templates={
+            isEdit && initialData
+              ? availableTemplates.filter(
+                  (template) => template.id !== initialData.id,
+                )
+              : availableTemplates
+          }
+          onChange={(fields) => handleUpdateColumnLocal(activeColumn.id, fields)}
+          onClose={() => setActiveColumnId(null)}
+        />
       )}
     </div>
   );
