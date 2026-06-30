@@ -1,7 +1,5 @@
 import { isTokenExpired } from "../lib/session"; // Убедись, что путь правильный
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
-
 interface ApiRequestConfig {
   headers?: HeadersInit;
 }
@@ -28,9 +26,17 @@ export class ApiClientError extends Error {
 export const isApiClientError = (error: unknown): error is ApiClientError =>
   error instanceof ApiClientError;
 
+// ВНИМАНИЕ: Если API на другом порту, тебе нужно добавлять BASE_URL.
+// Например: const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const buildUrl = (path: string): string => {
+  // Если путь уже абсолютный (начинается с http:// или https://), оставляем как есть
   if (/^https?:\/\//.test(path)) return path;
-  return `${API_URL}${path}`;
+
+  // Корректно склеиваем BASE_URL и относительный путь
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${BASE_URL}${cleanPath}`;
 };
 
 const parseResponseData = async (response: Response): Promise<unknown> => {
@@ -72,21 +78,33 @@ let refreshPromise: Promise<string> | null = null;
 
 const refreshAccessToken = async (): Promise<string> => {
   const timestamp = new Date().toISOString();
+  const refreshUrl = buildUrl("/auth/refresh");
+
   console.warn(
-    `[API_CLIENT] [${timestamp}] Инициирован реальный сетевой запрос POST /auth/refresh/`,
+    `[API_CLIENT] [${timestamp}] 🔄 Инициирован POST запрос на рефреш. URL: ${refreshUrl}`,
   );
 
-  const response = await fetch(buildUrl("/auth/refresh/"), {
-    method: "POST",
-    credentials: "include",
-  });
+  let response;
+  try {
+    response = await fetch(refreshUrl, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (error) {
+    console.error(
+      `[API_CLIENT] ❌ Сетевая ошибка при попытке рефреша (Failed to fetch). URL: ${refreshUrl}`,
+      error,
+    );
+    throw error;
+  }
 
   const data = await parseResponseData(response);
 
   if (!response.ok) {
     console.error(
       `[API_CLIENT] Сервер ответил ошибкой на рефреш. Статус: ${response.status}`,
-      data,
+      "\nДетали ответа:",
+      JSON.stringify(data, null, 2),
     );
     throw new ApiClientError(response.status, data, "Unable to refresh token");
   }
@@ -99,19 +117,19 @@ const refreshAccessToken = async (): Promise<string> => {
   if (typeof accessToken !== "string") {
     console.error(
       "[API_CLIENT] Ответ рефреша успешный, но поле access_token пустое или не строка",
-      data,
+      "\nТело ответа:",
+      JSON.stringify(data, null, 2),
     );
     throw new Error("Refresh response does not contain access_token");
   }
 
   console.log(
-    "[API_CLIENT] Рефреш успешно выполнен. Новый access_token записан в localStorage.",
+    "[API_CLIENT] ✅ Рефреш успешно выполнен. Новый access_token записан в localStorage.",
   );
   localStorage.setItem("access_token", accessToken);
   return accessToken;
 };
 
-// Единая функция-контроллер для блокировки параллельных рефрешей
 const handleRefreshAndRetry = async <T>(
   method: string,
   path: string,
@@ -122,26 +140,24 @@ const handleRefreshAndRetry = async <T>(
 
   if (refreshPromise) {
     console.log(
-      `[API_CLIENT] [${timestamp}] Запрос [${method} ${path}] обнаружил активный рефреш. Встает в ожидание промиса.`,
+      `[API_CLIENT] [${timestamp}] ⏳ Запрос [${method} ${path}] ждет завершения активного рефреша.`,
     );
   } else {
     console.warn(
-      `[API_CLIENT] [${timestamp}] Запрос [${method} ${path}] берет на себя создание единого промиса рефреша.`,
+      `[API_CLIENT] [${timestamp}] 🔑 Запрос [${method} ${path}] запускает процесс рефреша токена.`,
     );
     refreshPromise = refreshAccessToken().finally(() => {
       console.log(
-        "[API_CLIENT] Единый промис рефреша завершил работу. Сброс триггера.",
+        "[API_CLIENT] Единый промис рефреша завершил работу. Очистка.",
       );
       refreshPromise = null;
     });
   }
 
   try {
-    // Все параллельные запросы будут ждать выполнения этой строчки
     const newToken = await refreshPromise;
-
     console.log(
-      `[API_CLIENT] Ожидание рефреша для [${method} ${path}] завершено. Повторяем запрос со свежим Bearer токеном.`,
+      `[API_CLIENT] Ожидание рефреша для [${method} ${path}] завершено. Повторяем запрос...`,
     );
 
     const updatedConfig = {
@@ -152,11 +168,11 @@ const handleRefreshAndRetry = async <T>(
       },
     };
 
-    // Делаем повтор с флагом isRetry = true
     return await request<T>(method, path, payload, updatedConfig, true);
   } catch (error) {
     console.error(
-      `[API_CLIENT] Критическая ошибка рефреша в цепочке для запроса [${method} ${path}]. Очистка сессии и редирект.`,
+      `[API_CLIENT] 🚨 Критическая ошибка рефреша в цепочке для [${method} ${path}]. Очистка сессии и редирект.`,
+      error,
     );
 
     localStorage.removeItem("access_token");
@@ -164,7 +180,7 @@ const handleRefreshAndRetry = async <T>(
       typeof window !== "undefined" &&
       !window.location.pathname.includes("/login")
     ) {
-      console.warn("[API_CLIENT] Редирект пользователя на /login");
+      console.warn("[API_CLIENT] Редирект на /login");
       window.location.href = "/login";
     }
     throw error;
@@ -179,11 +195,11 @@ const request = async <T>(
   isRetry = false,
 ): Promise<ApiResponse<T>> => {
   const timestamp = new Date().toISOString();
+  const finalUrl = buildUrl(path);
 
-  // КЕЙС 0: Если прямо сейчас идет рефреш, а запрос НЕ повторный — отправляем его ждать
   if (refreshPromise && !isRetry && !path.includes("/auth/")) {
     console.log(
-      `[API_CLIENT] [${timestamp}] Перехват на взлете: запрос [${method} ${path}] остановлен, так как идет рефреш.`,
+      `[API_CLIENT] [${timestamp}] 🛑 Перехват: запрос [${method} ${path}] остановлен, так как идет рефреш.`,
     );
     return handleRefreshAndRetry<T>(method, path, payload, config);
   }
@@ -191,16 +207,21 @@ const request = async <T>(
   const token =
     typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
 
-  // ПРЕВЕНТИВНАЯ ПРОВЕРКА: Проверка протухания до отправки
   if (token && isTokenExpired(token) && !isRetry && !path.includes("/auth/")) {
     console.warn(
-      `[API_CLIENT] [${timestamp}] Превентивная проверка: Токен протух. Отправляем запрос [${method} ${path}] на рефреш.`,
+      `[API_CLIENT] [${timestamp}] ⚠️ Превентивная проверка: Токен протух. Запрос [${method} ${path}] направлен на рефреш.`,
     );
     return handleRefreshAndRetry<T>(method, path, payload, config);
   }
 
+  // >>> ГЛАВНЫЙ ЛОГ ДЛЯ ОТЛАДКИ URL <<<
   console.log(
-    `[API_CLIENT] [${timestamp}] Отправка сетевого запроса: [${method} ${path}] (Повтор: ${isRetry})`,
+    `[API_CLIENT] [${timestamp}] 🚀 ОТПРАВКА ЗАПРОСА:\n` +
+      `  Метод: ${method}\n` +
+      `  Путь (оригинал): ${path}\n` +
+      `  URL (итоговый): ${finalUrl}\n` +
+      `  Токен в наличии: ${!!token}\n` +
+      `  Повтор (isRetry): ${isRetry}`,
   );
 
   const headers = new Headers(config?.headers);
@@ -208,33 +229,48 @@ const request = async <T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(buildUrl(path), {
-    method,
-    headers,
-    credentials: "include",
-    body: createBody(payload, headers),
-  });
+  let response;
+  try {
+    response = await fetch(finalUrl, {
+      method,
+      headers,
+      credentials: "include",
+      body: createBody(payload, headers),
+    });
+  } catch (error) {
+    // ЕСЛИ ЗАПРОС ПАДАЕТ ТУТ (Failed to fetch) - ЭТО ПРОБЛЕМА С URL, ПОРТОМ ИЛИ CORS
+    console.error(
+      `[API_CLIENT] 💥 СЕТЕВАЯ ОШИБКА (Failed to fetch) при запросе к бэкенду.\n` +
+        `  URL: ${finalUrl}\n` +
+        `  Метод: ${method}\n` +
+        `  Возможно, фронтенд стучится не на тот порт (например на 3000 вместо 8000), или бэкенд не запущен.`,
+      error,
+    );
+    throw error;
+  }
 
   const data = await parseResponseData(response);
 
-  // ФОЛЛБЕК НА 401: Если бэкенд отбил запрос, а превентивно мы это не поймали
   if (response.status === 401 && !isRetry && !path.includes("/auth/")) {
     console.error(
-      `[API_CLIENT] [${timestamp}] Запрос [${method} ${path}] получил внезапный 401 от бэкенда. Отправка на фоллбек-рефреш.`,
+      `[API_CLIENT] [${timestamp}] 🚫 Запрос [${method} ${finalUrl}] получил 401 Unauthorized. Идем на фоллбек-рефреш.`,
     );
     return handleRefreshAndRetry<T>(method, path, payload, config);
   }
 
   if (!response.ok) {
     console.error(
-      `[API_CLIENT] Запрос [${method} ${path}] завершился ошибкой HTTP ${response.status}`,
+      `[API_CLIENT] ❌ Запрос [${method} ${finalUrl}] завершился с ошибкой HTTP ${response.status}`,
+      "\nДетали ответа бэкенда:",
+      JSON.stringify(data, null, 2),
     );
     throw new ApiClientError(response.status, data, response.statusText);
   }
 
   console.log(
-    `[API_CLIENT] Запрос [${method} ${path}] успешно выполнен. Код: ${response.status}`,
+    `[API_CLIENT] ✅ Запрос [${method} ${finalUrl}] успешно выполнен. Код: ${response.status}`,
   );
+
   return {
     data: data as T,
     status: response.status,

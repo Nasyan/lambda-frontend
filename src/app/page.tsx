@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "../shared/api/api-client";
 import { AppSidebar } from "@/src/widgets/app-sidebar/ui/AppSidebar";
 
-// Описываем интерфейс пользователя в соответствии с моделью БД
 interface InstanceUser {
   uuid: string;
   email: string;
@@ -21,10 +20,9 @@ export default function CRMDashboard() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Функция для загрузки актуальных данных из БД
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get<InstanceUser[]>("/creator/users/");
+      const response = await apiClient.get<InstanceUser[]>("/creator/users");
       setUsers(response.data);
     } catch (err) {
       console.error("Ошибка при получении списка сотрудников:", err);
@@ -34,7 +32,6 @@ export default function CRMDashboard() {
   };
 
   useEffect(() => {
-    // Проверка авторизации на клиенте перед запросом данных
     if (!localStorage.getItem("access_token")) {
       router.push("/login");
       return;
@@ -45,10 +42,11 @@ export default function CRMDashboard() {
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient.post("/creator/invite-user/", { email: inviteEmail });
+      // БЕЗ СЛЭША В КОНЦЕ
+      await apiClient.post("/creator/invite-user", { email: inviteEmail });
       alert(`Инвайт успешно отправлен на ${inviteEmail}`);
       setInviteEmail("");
-      fetchUsers(); // Перезапрашиваем список (если нужно зафиксировать изменения)
+      fetchUsers();
     } catch {
       alert(
         "Ошибка отправки инвайта. Возможно, пользователь уже зарегистрирован.",
@@ -58,9 +56,10 @@ export default function CRMDashboard() {
 
   const handlePromote = async (uuid: string) => {
     try {
-      await apiClient.post("/creator/promote-to-creator/", { user_uuid: uuid });
+      // БЕЗ СЛЭША В КОНЦЕ
+      await apiClient.post("/creator/promote-to-creator", { user_uuid: uuid });
       alert("Пользователь успешно повышен до CREATOR");
-      fetchUsers(); // Обновляем состояние интерфейса из базы
+      fetchUsers();
     } catch {
       alert("Не удалось повысить пользователя.");
     }
@@ -68,7 +67,8 @@ export default function CRMDashboard() {
 
   const handleDemote = async (uuid: string) => {
     try {
-      await apiClient.post("/creator/demote-to-user/", { user_uuid: uuid });
+      // БЕЗ СЛЭША В КОНЦЕ
+      await apiClient.post("/creator/demote-to-user", { user_uuid: uuid });
       alert("Пользователь понижен до USER, кастомные права сброшены.");
       fetchUsers();
     } catch {
@@ -77,12 +77,10 @@ export default function CRMDashboard() {
   };
 
   const handleUpdatePermissions = async (uuid: string) => {
-    // ХАРДКОД ДЛЯ ТЕСТА: Передаем валидный набор строк из энама AppTools твоей модели.
-    // В реальном UI здесь должна открываться модалка с чекбоксами.
     const testTools = ["notes", "tables", "analytics"];
-
     try {
-      await apiClient.post("/creator/update-permissions/", {
+      // БЕЗ СЛЭША В КОНЦЕ
+      await apiClient.post("/creator/update-permissions", {
         user_uuid: uuid,
         allowed_tools: testTools,
       });
@@ -97,7 +95,8 @@ export default function CRMDashboard() {
     if (!confirm("Точно деактивировать сотрудника в рамках вашего инстанса?"))
       return;
     try {
-      await apiClient.post("/creator/deactivate-user/", { user_uuid: uuid });
+      // БЕЗ СЛЭША В КОНЦЕ
+      await apiClient.post("/creator/deactivate-user", { user_uuid: uuid });
       alert("Пользователь успешно деактивирован.");
       fetchUsers();
     } catch {
@@ -122,7 +121,6 @@ export default function CRMDashboard() {
     <div className="min-h-screen bg-gray-50 text-gray-950 md:flex">
       <AppSidebar />
       <main className="mx-auto w-full max-w-5xl p-8">
-        {/* Шапка панели */}
         <div className="flex justify-between items-center mb-8 border-b pb-4">
           <h1 className="text-3xl font-bold">
             Управление инстансом (Панель Creator)
@@ -135,7 +133,6 @@ export default function CRMDashboard() {
           </button>
         </div>
 
-        {/* Блок отправки инвайтов */}
         <div className="mb-8 p-4 bg-white shadow rounded border">
           <h2 className="text-lg font-bold mb-2">
             Пригласить сотрудника (User)
@@ -158,10 +155,8 @@ export default function CRMDashboard() {
           </form>
         </div>
 
-        {/* Список реальных пользователей из инстанса */}
         <div className="bg-white shadow rounded p-4 border">
           <h2 className="text-lg font-bold mb-4">Сотрудники компании</h2>
-
           {users.length === 0 ? (
             <p className="text-gray-500 text-sm">
               В данном инстансе пока нет зарегистрированных сотрудников.
@@ -175,7 +170,6 @@ export default function CRMDashboard() {
                     user.active ? "bg-white" : "bg-gray-100 opacity-60"
                   }`}
                 >
-                  {/* Данные пользователя и его доступы */}
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-gray-900">{user.email}</p>
@@ -193,7 +187,6 @@ export default function CRMDashboard() {
                       | UUID: {user.uuid}
                     </p>
 
-                    {/* Вывод массива разрешенных инструментов из таблицы user_permissions */}
                     <div className="flex gap-1 mt-1 flex-wrap">
                       {user.allowed_tools.length === 0 ? (
                         <span className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded font-medium border border-red-200">
@@ -212,7 +205,6 @@ export default function CRMDashboard() {
                     </div>
                   </div>
 
-                  {/* Кнопки управления действиями бэкенда */}
                   <div className="flex gap-2 flex-wrap max-w-md justify-end">
                     {user.role !== "CREATOR" && (
                       <button

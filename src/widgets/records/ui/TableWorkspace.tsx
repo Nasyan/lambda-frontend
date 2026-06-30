@@ -12,12 +12,15 @@ import type {
   JsonObject,
   TemplateResponse,
 } from "@/src/entities/template/model/types";
+import {
+  formatFieldValueForSubmit,
+  getFieldValueSubmitError,
+  isEmptyFieldValue,
+} from "@/src/entities/template/model/field-registry";
 import { AppSidebar } from "@/src/widgets/app-sidebar/ui/AppSidebar";
 import { ColumnDef, DataTable } from "./DataTable";
 import { Modal } from "./Modal";
 import { DynamicForm } from "./DynamicForm";
-
-// Импорт новых переиспользуемых компонентов
 
 interface RecordsWorkspaceProps {
   templateUuid: string;
@@ -105,14 +108,23 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
       Object.keys(template.schema).forEach((col) => {
         const meta = template.schema[col];
         const val = formData[col];
-        if (val === undefined || val === "") {
-          if (meta.required) throw new Error(`Поле "${col}" обязательно`);
+        if (meta.type === "formula") {
           return;
         }
-        if (meta.type === "number") formattedData[col] = Number(val) || 0;
-        else if (meta.type === "boolean")
-          formattedData[col] = val === "true" || val === true;
-        else formattedData[col] = val;
+
+        const submitError = getFieldValueSubmitError(col, meta, val);
+        if (submitError) {
+          throw new Error(submitError);
+        }
+
+        if (isEmptyFieldValue(meta, val)) {
+          return;
+        }
+
+        const formattedValue = formatFieldValueForSubmit(meta, val);
+        if (formattedValue !== undefined) {
+          formattedData[col] = formattedValue;
+        }
       });
 
       const rId = editingRecord ? getRecordId(editingRecord) : "";
@@ -272,6 +284,7 @@ export function TableWorkspace({ templateUuid }: RecordsWorkspaceProps) {
       >
         <DynamicForm
           schema={template?.schema || {}}
+          instanceUuid={instanceUuid}
           initialData={editingRecord?.data || {}}
           onSubmit={handleSave}
           onCancel={() => setIsModalOpen(false)}

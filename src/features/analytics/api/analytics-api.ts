@@ -6,7 +6,16 @@ import type {
   WidgetDataPoint,
 } from "@/src/entities/analytics/model/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+// Берем базовый URL бэкенда из переменных окружения.
+// Если она не задана, используем твой локальный порт бэкенда по умолчанию.
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Вспомогательная функция для сборки полного URL без лишних двойных слэшей
+function buildUrl(path: string): string {
+  const cleanBase = BASE_URL.endsWith("/") ? BASE_URL.slice(0, -1) : BASE_URL;
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${cleanBase}${cleanPath}`;
+}
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const token = getAccessToken();
@@ -18,7 +27,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     ...options.headers,
   };
 
-  const response = await fetch(`${API_URL}${url}`, { ...options, headers });
+  // ВАЖНО: Обязательно собираем полный URL до бэкенда
+  const fullUrl = buildUrl(url);
+
+  const response = await fetch(fullUrl, { ...options, headers });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
@@ -82,7 +94,7 @@ export const analyticsApi = {
     );
   },
 
-  // Ссылка для скачивания CSV файла напрямую
+  // Ссылка для скачивания CSV файла напрямую (здесь тоже нужен полный URL до бэка!)
   getExportCsvUrl: (
     instanceUuid: string,
     widgetUuid: string,
@@ -94,6 +106,8 @@ export const analyticsApi = {
     if (filters?.date_field) params.append("date_field", filters.date_field);
 
     const queryStr = params.toString() ? `?${params.toString()}` : "";
-    return `${API_URL}/instances/${instanceUuid}/widgets/${widgetUuid}/export-csv${queryStr}`;
+    return buildUrl(
+      `/instances/${instanceUuid}/widgets/${widgetUuid}/export-csv${queryStr}`,
+    );
   },
 };

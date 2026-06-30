@@ -1,12 +1,15 @@
 import { TriggerEditorWorkspace } from "@/src/widgets/triggers/ui/TriggerEditorWorkspace";
 
 interface EditTriggerPageProps {
-  params: {
+  params: Promise<{
     trigger_uuid: string;
-  };
+  }>;
 }
 
-export default function EditTriggerPage({ params }: EditTriggerPageProps) {
-  // Передаем UUID из URL для режима редактирования
-  return <TriggerEditorWorkspace triggerUuid={params.trigger_uuid} />;
+export default async function EditTriggerPage({
+  params,
+}: EditTriggerPageProps) {
+  const resolvedParams = await params;
+
+  return <TriggerEditorWorkspace triggerUuid={resolvedParams.trigger_uuid} />;
 }

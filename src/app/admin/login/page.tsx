@@ -21,7 +21,7 @@ export default function AdminLogin() {
       formData.append("password", password);
 
       const response = await apiClient.post<{ access_token: string }>(
-        "/admin/login/",
+        "/admin/login",
         formData,
         {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },

@@ -6,6 +6,7 @@ const navigationItems = [
   { href: "/analytics", label: "Analytics" },
   { href: "/settings", label: "Settings" },
   { href: "/profile", label: "Profile" },
+  { href: "/notification", label: "Notification" },
 ];
 
 export function AppSidebar() {

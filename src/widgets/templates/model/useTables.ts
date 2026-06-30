@@ -37,7 +37,7 @@ export function useTables() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
 
-  // Новое: Состояние для модалки GitHub-style подтверждения
+  // Состояние для модалки GitHub-style подтверждения
   const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
     isOpen: false,
     mode: "single",
@@ -45,23 +45,16 @@ export function useTables() {
 
   // Инициализация токена и инстанса
   useEffect(() => {
-    let cancelled = false;
-    void Promise.resolve().then(() => {
-      if (cancelled) return;
-      if (!getAccessToken()) {
-        router.push("/login");
-        return;
-      }
-      const tokenInstanceUuid = getInstanceUuidFromAccessToken();
-      if (!tokenInstanceUuid) {
-        setLoading(false);
-        return;
-      }
-      setInstanceUuid(tokenInstanceUuid);
-    });
-    return () => {
-      cancelled = true;
-    };
+    if (!getAccessToken()) {
+      router.push("/login");
+      return;
+    }
+    const tokenInstanceUuid = getInstanceUuidFromAccessToken();
+    if (!tokenInstanceUuid) {
+      setLoading(false);
+      return;
+    }
+    setInstanceUuid(tokenInstanceUuid);
   }, [router]);
 
   // Загрузка данных
@@ -69,8 +62,10 @@ export function useTables() {
     if (!instanceUuid) return;
     setLoading(true);
     try {
-      const active = await templateApi.getTemplates(instanceUuid);
-      const deleted = await templateApi.getDeletedTemplates(instanceUuid);
+      const [active, deleted] = await Promise.all([
+        templateApi.getTemplates(instanceUuid),
+        templateApi.getDeletedTemplates(instanceUuid),
+      ]);
       setActiveTables(active);
       setDeletedTables(deleted);
     } catch (error) {
@@ -80,9 +75,19 @@ export function useTables() {
     }
   }, [instanceUuid]);
 
+  // Запускаем загрузку данных только тогда, когда получили валлидный instanceUuid
   useEffect(() => {
-    void Promise.resolve().then(loadData);
-  }, [loadData]);
+    if (instanceUuid) {
+      void loadData();
+    }
+  }, [instanceUuid, loadData]);
+
+  // ЭФФЕКТ-ИСПРАВЛЕНИЕ: Сброс выделения и открытых меню при переключении вкладок
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkMenuOpen(false);
+    setOpenDropdownId(null);
+  }, [currentView]);
 
   // Фильтрация списков по поисковому запросу
   const currentList = currentView === "active" ? activeTables : deletedTables;
@@ -145,7 +150,7 @@ export function useTables() {
     }
   };
 
-  // Безопасный триггер: вместо удаления сначала открывает модалку для множества строк
+  // Безопасный триггер модалки для множества строк
   const handleBulkForceDelete = () => {
     if (selectedIds.size === 0) return;
     setConfirmModal({
@@ -154,7 +159,7 @@ export function useTables() {
     });
   };
 
-  // Физическое массовое удаление (вызывается из модалки после успешного ввода фразы)
+  // Физическое массовое удаление
   const executeBulkForceDelete = async () => {
     if (!instanceUuid || selectedIds.size === 0) return;
     setProcessing(true);
@@ -174,9 +179,7 @@ export function useTables() {
     }
   };
 
-  // --- Одиночные действия строки ---
-
-  // Физическое одиночное удаление (вызывается из модалки после успешного ввода фразы)
+  // Физическое одиночное удаление
   const executeSingleForceDelete = async (id: string) => {
     if (!instanceUuid) return;
     setProcessing(true);
@@ -194,7 +197,6 @@ export function useTables() {
     if (!instanceUuid) return;
     setOpenDropdownId(null);
 
-    // Перехватываем force_delete и открываем модалку подтверждения текста
     if (action === "force_delete") {
       const targetTable = filteredList.find((t) => t.id === id);
       setConfirmModal({
@@ -256,7 +258,7 @@ export function useTables() {
     handleRowAction,
     confirmModal,
     setConfirmModal,
-    handleBulkForceDelete, // Маппим старое название на безопасный триггер модалки
+    handleBulkForceDelete,
     executeBulkForceDelete,
     executeSingleForceDelete,
   };

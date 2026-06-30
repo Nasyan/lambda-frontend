@@ -37,8 +37,8 @@ export default function AdminDashboard() {
     setLoading(true);
     try {
       const [instRes, creatRes] = await Promise.all([
-        apiClient.get<AdminInstance[]>("/admin/instances/"),
-        apiClient.get<AdminCreator[]>("/admin/creators/"),
+        apiClient.get<AdminInstance[]>("/admin/instances"),
+        apiClient.get<AdminCreator[]>("/admin/creators"),
       ]);
       setInstances(instRes.data);
       setCreators(creatRes.data);
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
   const handleCreateInstance = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient.post("/admin/instances/", { title: newInstanceTitle });
+      await apiClient.post("/admin/instances", { title: newInstanceTitle });
       setNewInstanceTitle("");
       await fetchData();
     } catch {
@@ -73,7 +73,7 @@ export default function AdminDashboard() {
     if (!confirm("Вы уверены, что хотите безвозвратно удалить этот инстанс?"))
       return;
     try {
-      await apiClient.delete(`/admin/instances/${id}/`);
+      await apiClient.delete(`/admin/instances/${id}`);
       await fetchData();
     } catch {
       alert("Ошибка при деструкции инстанса");
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
   const handleInviteCreator = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiClient.post("/admin/invite-creator/", {
+      await apiClient.post("/admin/invite-creator", {
         email: inviteEmail,
         instance_id: inviteInstanceId,
       });

@@ -65,7 +65,7 @@ export function TablesWorkspace() {
           activeCount={activeTables.length}
           deletedCount={deletedTables.length}
           currentView={currentView}
-          setCurrentView={setCurrentView}
+          setCurrentView={setCurrentView} // <--- Кнопки должны вызывать именно это!
           resetSelection={resetSelection}
         />
 

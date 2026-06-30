@@ -128,10 +128,12 @@ export const templateApi = {
   async updateColumn(
     instanceUuid: string,
     templateUuid: string,
+    columnName: string, // <-- 1. Добавляем аргумент
     payload: ColumnAddOrUpdateRequest,
   ): Promise<TemplateResponse> {
     const response = await apiClient.patch<TemplateDto>(
-      columnsPath(instanceUuid, templateUuid),
+      // 2. Добавляем имя колонки в URL
+      `${columnsPath(instanceUuid, templateUuid)}/${encodePathPart(columnName)}`,
       payload,
     );
     return normalizeTemplate(response.data);
